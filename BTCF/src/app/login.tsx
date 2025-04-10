@@ -16,7 +16,7 @@ export default function Login() {
   }
 
   function handleCadastro() {
-    router.push("../Cadastro.tsx");
+    router.push("/Cadastro");
   }
 
   return (
