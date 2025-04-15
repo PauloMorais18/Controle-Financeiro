@@ -8,22 +8,38 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// Teste de rota
 app.get('/', (req, res) => {
-  res.send('Servidor rodando!');
+  res.send('Servidor BTCF está rodando!');
 });
 
-// Exemplo de SELECT
+// ✅ Rota para testar conexão com o banco de dados
+app.get('/testdb', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW()');
+    res.json({
+      status: 'ok',
+      message: 'Conexão com o banco bem-sucedida!',
+      timestamp: result.rows[0].now,
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Erro na conexão com o banco',
+      error: error.message,
+    });
+  }
+});
+
 app.get('/transacoes', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM transacoes');
     res.json(result.rows);
-  } catch (error) {
-    res.status(500).json({ erro: error.message });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
   }
 });
 
-// Exemplo de INSERT
+// ➕ Rota para adicionar transações
 app.post('/transacoes', async (req, res) => {
   const { tipo, valor, descricao } = req.body;
   try {
@@ -32,11 +48,11 @@ app.post('/transacoes', async (req, res) => {
       [tipo, valor, descricao]
     );
     res.json(result.rows[0]);
-  } catch (error) {
-    res.status(500).json({ erro: error.message });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🟢 Servidor BTCF rodando na porta ${PORT}`);
 });
