@@ -1,6 +1,5 @@
-// src/app/_layout.tsx
-import LayoutLogin from "../layouts/LayoutLogin";
+import { Drawer } from "expo-router/drawer";
 
-export default function RootLayout() {
-  return <LayoutLogin />;
+export default function Layout() {
+  return <Drawer />;
 }
