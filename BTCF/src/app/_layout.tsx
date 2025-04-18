@@ -53,7 +53,7 @@ function CustomDrawerContent(props: any) {
         />
         <DrawerItem
           label="🧾 Relatório"
-          onPress={() => navigation.navigate("Relatorio")}
+          onPress={() => navigation.navigate("RelatorioFinanceiro")}
         />
       </View>
 

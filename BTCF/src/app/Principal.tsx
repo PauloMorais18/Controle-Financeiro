@@ -9,14 +9,14 @@ import {
   Animated
 } from "react-native";
 import { PieChart } from "react-native-chart-kit";
-import { useNavigation } from "expo-router";
+import { useRouter } from "expo-router";
 import { DrawerActions } from "@react-navigation/native";
 import Index from ".";
 
 const screenWidth = Dimensions.get("window").width;
 
 export default function Principal() {
-  const navigation = useNavigation();
+  const router = useRouter();
   const [showActions, setShowActions] = useState(false);
   const [showValue, setShowValue] = useState(false); // 👈 estado para exibir/ocultar valor
 
@@ -33,10 +33,10 @@ export default function Principal() {
       {/* Cabeçalho azul com menu e título */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => navigation.dispatch(DrawerActions.openDrawer())}>
-            <Text style={styles.menu}>☰</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>Dashboard</Text>
+        <TouchableOpacity onPress={() => router.push("/Perfil")}>
+          <Text style={styles.menu}>👤</Text>
+        </TouchableOpacity>
+          <Text style={styles.title}>Nome, Usuario</Text>
         </View>
         <TouchableOpacity onPress={() => setShowValue(!showValue)}>
           <View style={styles.logo}>
@@ -46,7 +46,7 @@ export default function Principal() {
             </Text>
           </View>
         </TouchableOpacity>
-      </View>
+      </View> 
 
       {/* Gráfico */}
       <PieChart
