@@ -51,9 +51,6 @@ export default function Configuracoes() {
         <TouchableOpacity style={styles.button} onPress={handleExportarDados}>
           <Text style={styles.buttonText}>Exportar dados</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.button, { backgroundColor: '#c62828' }]} onPress={handleRedefinirApp}>
-          <Text style={styles.buttonText}>Redefinir aplicativo</Text>
-        </TouchableOpacity>
       </View>
 
       <Text style={styles.sectionTitle}>❓ Sobre</Text>
