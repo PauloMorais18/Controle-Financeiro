@@ -37,7 +37,7 @@ function CustomDrawerContent(props: any) {
         />
         <DrawerItem
           label="👥 Criar Grupo"
-          onPress={() => navigation.navigate("CriarGrupo")}
+          onPress={() => navigation.navigate("Grupo")}
         />
         <DrawerItem
           label="➕ Entrada"
