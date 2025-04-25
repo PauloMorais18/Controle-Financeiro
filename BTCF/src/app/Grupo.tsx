@@ -1,3 +1,4 @@
+// Grupo.tsx
 import React, { useState } from "react";
 import {
   View,
@@ -8,8 +9,10 @@ import {
   StyleSheet,
   Alert,
 } from "react-native";
+import { useTheme } from "./ThemeContext"; // Importa o hook useTheme
 
 export default function Grupo() {
+  const { tema } = useTheme(); // Acessa o tema atual
   const [grupoCriado, setGrupoCriado] = useState(false);
   const [nomeGrupo, setNomeGrupo] = useState("");
   const [membros, setMembros] = useState<string[]>([]);
@@ -59,34 +62,39 @@ export default function Grupo() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
       {!grupoCriado ? (
         <>
-          <Text style={styles.title}>Criar Grupo</Text>
+          <Text style={[styles.title, { color: tema.textColor }]}>Criar Grupo</Text>
           <TextInput
             placeholder="Nome do grupo"
+            placeholderTextColor={tema.itemColor}
             value={nomeGrupo}
             onChangeText={setNomeGrupo}
-            style={styles.input}
+            style={[styles.input, { 
+              borderColor: tema.inputBorderColor, 
+              backgroundColor: tema.inputBackground, 
+              color: tema.textColor 
+            }]}
           />
-          <TouchableOpacity style={styles.button} onPress={criarGrupo}>
+          <TouchableOpacity style={[styles.button, { backgroundColor: tema.linkColor }]} onPress={criarGrupo}>
             <Text style={styles.buttonText}>Criar grupo</Text>
           </TouchableOpacity>
         </>
       ) : (
         <>
-          <Text style={styles.title}>Grupo: {nomeGrupo}</Text>
+          <Text style={[styles.title, { color: tema.textColor }]}>Grupo: {nomeGrupo}</Text>
 
-          <Text style={styles.subtitle}>Membros</Text>
+          <Text style={[styles.subtitle, { color: tema.textColor }]}>Membros</Text>
           <FlatList
             data={membros}
             keyExtractor={(_, index) => index.toString()}
             renderItem={({ item, index }) => (
-              <View style={styles.memberItem}>
-                <Text style={styles.memberName}>{item}</Text>
+              <View style={[styles.memberItem, { borderBottomColor: tema.inputBorderColor }]}>
+                <Text style={[styles.memberName, { color: tema.textColor }]}>{item}</Text>
                 <View style={styles.actions}>
                   <TouchableOpacity onPress={() => editarMembro(index)}>
-                    <Text style={styles.edit}>✏️</Text>
+                    <Text style={[styles.edit, { color: tema.itemColor }]}>✏️</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => removerMembro(index)}>
                     <Text style={styles.remove}>❌</Text>
@@ -95,7 +103,7 @@ export default function Grupo() {
               </View>
             )}
             ListEmptyComponent={
-              <Text style={{ fontStyle: "italic", color: "#888" }}>
+              <Text style={{ fontStyle: "italic", color: tema.itemColor }}>
                 Nenhum membro ainda.
               </Text>
             }
@@ -104,11 +112,16 @@ export default function Grupo() {
 
           <TextInput
             placeholder="Nome do membro"
+            placeholderTextColor={tema.itemColor}
             value={novoMembro}
             onChangeText={setNovoMembro}
-            style={styles.input}
+            style={[styles.input, { 
+              borderColor: tema.inputBorderColor, 
+              backgroundColor: tema.inputBackground, 
+              color: tema.textColor 
+            }]}
           />
-          <TouchableOpacity style={styles.button} onPress={adicionarMembro}>
+          <TouchableOpacity style={[styles.button, { backgroundColor: tema.linkColor }]} onPress={adicionarMembro}>
             <Text style={styles.buttonText}>
               {modoEdicao !== null ? "Salvar edição" : "Adicionar membro"}
             </Text>
@@ -123,7 +136,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: "#fff",
   },
   title: {
     fontSize: 22,
@@ -137,15 +149,12 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
     marginBottom: 12,
-    backgroundColor: "#f9f9f9",
   },
   button: {
-    backgroundColor: "#1976D2",
     padding: 14,
     borderRadius: 8,
     alignItems: "center",
@@ -161,7 +170,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
   },
   memberName: {
     fontSize: 16,
@@ -174,7 +182,6 @@ const styles = StyleSheet.create({
   },
   edit: {
     fontSize: 18,
-    color: "#555",
     marginRight: 12,
   },
   remove: {

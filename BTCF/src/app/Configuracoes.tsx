@@ -1,63 +1,67 @@
-import React, { useState } from "react";
+// Configuracoes.js
+import React from "react";
 import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView, Alert, TextInput } from "react-native";
+import { useTheme } from "./ThemeContext"; // Ajuste o caminho conforme necessário
 
 export default function Configuracoes() {
-  const [temaEscuro, setTemaEscuro] = useState(false);
-  const [notificacoes, setNotificacoes] = useState(true);
-  const [emailExportacao, setEmailExportacao] = useState("usuario@email.com");
+  const { temaEscuro, setTemaEscuro, tema } = useTheme();
+  const [emailExportacao, setEmailExportacao] = React.useState("usuario@email.com");
+  const [notificacoes, setNotificacoes] = React.useState(true);
 
   function handleExportarDados() {
-    Alert.alert("Exportar Dados", `Dados enviados para: ${emailExportacao}`);
-  }
-
-  function handleRedefinirApp() {
-    Alert.alert("Redefinir App", "Todos os dados serão apagados.");
+    Alert.alert("Exportar Dados", `Os dados foram enviados para: ${emailExportacao}`);
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.sectionTitle}>👤 Perfil</Text>
-      <View style={styles.sectionBox}>
-        <Text style={styles.item}>Nome: Michele</Text>
-        <Text style={styles.item}>E-mail: michele@email.com</Text>
+    <ScrollView style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
+      <Text style={[styles.sectionTitle, { color: tema.textColor }]}>👤 Perfil</Text>
+      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground, shadowColor: tema.shadowColor }]}>
+        <Text style={[styles.item, { color: tema.itemColor }]}>Nome: Michele</Text>
+        <Text style={[styles.item, { color: tema.itemColor }]}>E-mail: michele@email.com</Text>
         <View style={styles.rowButtons}>
-          <TouchableOpacity style={styles.button}><Text style={styles.buttonText}>Editar Perfil</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.button}><Text style={styles.buttonText}>Alterar Senha</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.button}>
+            <Text style={styles.buttonText}>Editar Perfil</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.button}>
+            <Text style={styles.buttonText}>Alterar Senha</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>⚙️ Preferências</Text>
-      <View style={styles.sectionBox}>
+      <Text style={[styles.sectionTitle, { color: tema.textColor }]}>⚙️ Preferências</Text>
+      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground, shadowColor: tema.shadowColor }]}>
         <View style={styles.toggleRow}>
-          <Text style={styles.item}>Tema escuro</Text>
+          <Text style={[styles.item, { color: tema.itemColor }]}>Tema Escuro</Text>
           <Switch value={temaEscuro} onValueChange={setTemaEscuro} />
         </View>
         <View style={styles.toggleRow}>
-          <Text style={styles.item}>Notificações</Text>
+          <Text style={[styles.item, { color: tema.itemColor }]}>Notificações</Text>
           <Switch value={notificacoes} onValueChange={setNotificacoes} />
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>📁 Dados</Text>
-      <View style={styles.sectionBox}>
-        <Text style={styles.item}>E-mail para exportação:</Text>
+      <Text style={[styles.sectionTitle, { color: tema.textColor }]}>📁 Dados</Text>
+      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground, shadowColor: tema.shadowColor }]}>
+        <Text style={[styles.item, { color: tema.itemColor }]}>E-mail para exportação:</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: tema.inputBackground, borderColor: tema.inputBorderColor, color: tema.textColor }]}
           value={emailExportacao}
           onChangeText={setEmailExportacao}
           keyboardType="email-address"
           autoCapitalize="none"
+          placeholder="Digite o e-mail"
+          placeholderTextColor={tema.itemColor}
         />
         <TouchableOpacity style={styles.button} onPress={handleExportarDados}>
-          <Text style={styles.buttonText}>Exportar dados</Text>
+          <Text style={styles.buttonText}>Exportar Dados</Text>
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>❓ Sobre</Text>
-      <View style={styles.sectionBox}>
-        <Text style={styles.item}>Versão: 1.0.0</Text>
-        <Text style={styles.link}>Política de Privacidade</Text>
-        <Text style={styles.link}>Suporte</Text>
+      <Text style={[styles.sectionTitle, { color: tema.textColor }]}>❓ Sobre</Text>
+      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground, shadowColor: tema.shadowColor }]}>
+        <Text style={[styles.item, { color: tema.itemColor }]}>Versão: 1.0.0</Text>
+        <Text style={[styles.link, { color: tema.linkColor }]}>Política de Privacidade</Text>
+        <Text style={[styles.link, { color: tema.linkColor }]}>Suporte</Text>
       </View>
     </ScrollView>
   );
@@ -66,7 +70,6 @@ export default function Configuracoes() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fdfdfd",
     paddingHorizontal: 20,
     paddingTop: 40,
   },
@@ -75,14 +78,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 30,
     marginBottom: 12,
-    color: "#333",
   },
   sectionBox: {
-    backgroundColor: "#f9f9f9",
     padding: 18,
     borderRadius: 12,
     marginBottom: 24,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -91,7 +91,6 @@ const styles = StyleSheet.create({
   item: {
     fontSize: 16,
     marginBottom: 10,
-    color: "#444",
   },
   toggleRow: {
     flexDirection: "row",
@@ -118,17 +117,14 @@ const styles = StyleSheet.create({
   },
   link: {
     fontSize: 16,
-    color: "#1976D2",
     textDecorationLine: "underline",
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
     borderRadius: 8,
     padding: 10,
     fontSize: 16,
     marginBottom: 12,
-    backgroundColor: "#fff",
   },
 });

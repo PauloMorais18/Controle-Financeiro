@@ -1,11 +1,15 @@
+// Perfil.tsx
 import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from "react-native";
+import { useTheme } from "./ThemeContext"; // Importa o hook useTheme
 
 export const screenOptions = {
-    headerShown: true,
-    title: "Perfil",
-  };
+  headerShown: true,
+  title: "Perfil",
+};
 
 export default function Perfil() {
+  const { tema } = useTheme(); // Acessa o tema atual
+
   function handleEditarPerfil() {
     Alert.alert("Editar Perfil", "Função de edição de perfil em desenvolvimento.");
   }
@@ -13,17 +17,17 @@ export default function Perfil() {
   function handleLogout() {
     Alert.alert("Sair", "Você saiu da sua conta.");
   }
-  
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
       <Image
         source={{ uri: "https://www.w3schools.com/howto/img_avatar.png" }}
         style={styles.avatar}
       />
-      <Text style={styles.nome}>Exemplo nome</Text>
-      <Text style={styles.email}>exemplo18@gmail.com</Text>
+      <Text style={[styles.nome, { color: tema.textColor }]}>Exemplo nome</Text>
+      <Text style={[styles.email, { color: tema.itemColor }]}>exemplo18@gmail.com</Text>
 
-      <TouchableOpacity style={styles.botao} onPress={handleEditarPerfil}>
+      <TouchableOpacity style={[styles.botao, { backgroundColor: tema.linkColor }]} onPress={handleEditarPerfil}>
         <Text style={styles.botaoTexto}>✏️ Editar Perfil</Text>
       </TouchableOpacity>
 
@@ -40,7 +44,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 80,
     alignItems: "center",
-    backgroundColor: "#fff",
   },
   avatar: {
     width: 120,
@@ -52,15 +55,12 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "bold",
     marginBottom: 4,
-    color: "#333",
   },
   email: {
     fontSize: 16,
-    color: "#777",
     marginBottom: 24,
   },
   botao: {
-    backgroundColor: "#1976D2",
     paddingVertical: 12,
     paddingHorizontal: 32,
     borderRadius: 24,
@@ -75,4 +75,3 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 });
-  

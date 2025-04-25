@@ -10,6 +10,7 @@ import {
 import moment from "moment";
 import "moment/locale/pt-br";
 import { BarChart } from "react-native-chart-kit";
+import { useTheme } from "./ThemeContext"; // Importa o hook useTheme
 
 // Tipos
 type Transacao = {
@@ -24,6 +25,7 @@ type TransacoesPorMes = {
 const screenWidth = Dimensions.get("window").width;
 
 export default function Analise() {
+  const { tema } = useTheme(); // Acessa o tema atual
   const [mesAtual, setMesAtual] = useState<moment.Moment>(moment());
 
   const transacoesPorMes: TransacoesPorMes = {
@@ -68,30 +70,30 @@ export default function Analise() {
   const valoresMensais = [2500, 3000, 1800, 3200];
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>📊 Análise Financeira</Text>
+    <ScrollView style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
+      <Text style={[styles.title, { color: tema.textColor }]}>📊 Análise Financeira</Text>
 
       <View style={styles.periodSelector}>
         <TouchableOpacity onPress={() => mudarMes(-1)}>
-          <Text style={styles.arrow}>←</Text>
+          <Text style={[styles.arrow, { color: tema.textColor }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.periodText}>{mesAtual.format("MMMM [de] YYYY")}</Text>
+        <Text style={[styles.periodText, { color: tema.textColor }]}>{mesAtual.format("MMMM [de] YYYY")}</Text>
         <TouchableOpacity onPress={() => mudarMes(1)}>
-          <Text style={styles.arrow}>→</Text>
+          <Text style={[styles.arrow, { color: tema.textColor }]}>→</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.summaryBox}>
-        <Text style={styles.summaryItem}>Entradas: R$ {entradas.toFixed(2)}</Text>
-        <Text style={styles.summaryItem}>Saídas: R$ {saidas.toFixed(2)}</Text>
-        <Text style={styles.summaryItem}>Saldo: R$ {saldo.toFixed(2)}</Text>
+      <View style={[styles.summaryBox, { backgroundColor: tema.sectionBoxBackground }]}>
+        <Text style={[styles.summaryItem, { color: tema.textColor }]}>Entradas: R$ {entradas.toFixed(2)}</Text>
+        <Text style={[styles.summaryItem, { color: tema.textColor }]}>Saídas: R$ {saidas.toFixed(2)}</Text>
+        <Text style={[styles.summaryItem, { color: tema.textColor }]}>Saldo: R$ {saldo.toFixed(2)}</Text>
       </View>
 
-      <Text style={styles.statusMes}>{statusMes}</Text>
+      <Text style={[styles.statusMes, { color: tema.textColor }]}>{statusMes}</Text>
 
       {/* Gráfico de gastos por categoria */}
       <View style={styles.graphBox}>
-        <Text style={styles.graphTitle}>Gastos por categoria</Text>
+        <Text style={[styles.graphTitle, { color: tema.textColor }]}>Gastos por categoria</Text>
         <BarChart
           data={{
             labels: categorias,
@@ -104,11 +106,26 @@ export default function Analise() {
           yAxisSuffix=""
           showValuesOnTopOfBars
           chartConfig={{
-            backgroundGradientFrom: "#fff",
-            backgroundGradientTo: "#fff",
+            backgroundGradientFrom: tema.sectionBoxBackground,
+            backgroundGradientTo: tema.sectionBoxBackground,
             decimalPlaces: 0,
             color: (opacity = 1) => `rgba(25, 118, 210, ${opacity})`,
-            labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+            labelColor: (opacity = 1) => tema.textColor, // Rótulos dinâmicos com base no tema
+            propsForLabels: {
+              fontSize: 12,
+            },
+            fillShadowGradient: "#1976D2",
+            fillShadowGradientOpacity: 1,
+            barPercentage: 0.6,
+            style: {
+              borderRadius: 12,
+            },
+            propsForVerticalLabels: {
+              rotation: 0,
+            },
+            propsForHorizontalLabels: {
+              fill: tema.textColor, // "R$" dinâmico com base no tema
+            },
           }}
           style={{ borderRadius: 12 }}
         />
@@ -116,7 +133,7 @@ export default function Analise() {
 
       {/* Gráfico comparativo mensal */}
       <View style={styles.graphBox}>
-        <Text style={styles.graphTitle}>Comparativo mensal</Text>
+        <Text style={[styles.graphTitle, { color: tema.textColor }]}>Comparativo mensal</Text>
         <BarChart
           data={{
             labels: meses,
@@ -129,11 +146,26 @@ export default function Analise() {
           yAxisSuffix=""
           showValuesOnTopOfBars
           chartConfig={{
-            backgroundGradientFrom: "#fff",
-            backgroundGradientTo: "#fff",
+            backgroundGradientFrom: tema.sectionBoxBackground,
+            backgroundGradientTo: tema.sectionBoxBackground,
             decimalPlaces: 0,
             color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`,
-            labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+            labelColor: (opacity = 1) => tema.textColor, // Meses dinâmicos com base no tema
+            propsForLabels: {
+              fontSize: 12,
+            },
+            fillShadowGradient: "#4CAF50",
+            fillShadowGradientOpacity: 1,
+            barPercentage: 0.6,
+            style: {
+              borderRadius: 12,
+            },
+            propsForVerticalLabels: {
+              rotation: 0,
+            },
+            propsForHorizontalLabels: {
+              fill: tema.textColor, // "R$" dinâmico com base no tema
+            },
           }}
           style={{ borderRadius: 12 }}
         />
@@ -145,7 +177,6 @@ export default function Analise() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
     padding: 20,
   },
   title: {
@@ -169,7 +200,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   summaryBox: {
-    backgroundColor: "#f4f4f4",
     borderRadius: 10,
     padding: 16,
     marginBottom: 16,
@@ -182,7 +212,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontStyle: "italic",
     marginBottom: 24,
-    color: "#444",
   },
   graphBox: {
     marginBottom: 30,
