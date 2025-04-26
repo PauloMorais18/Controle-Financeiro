@@ -7,19 +7,18 @@ import {
   TouchableOpacity,
   FlatList,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { useTheme } from "./ThemeContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type Transacao = {
   id: number;
-  valor: string;
+  valor: number;
   tipo: string;
-  data: string;
-  parcelas?: string;
-  valorParcela?: string;
-  dataTermino?: string;
   descricao: string;
+  data: string;
 };
 
 export default function MovimentacaoEntrada() {
@@ -31,30 +30,9 @@ export default function MovimentacaoEntrada() {
   const [dataTermino, setDataTermino] = useState("");
   const [descricao, setDescricao] = useState("");
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const dataAtual = new Date().toLocaleDateString();
-
-  useEffect(() => {
-    if (tipo === "parcelado" && valor && parcelas) {
-      const qtd = parseInt(parcelas);
-      const val = parseFloat(valor.replace(",", "."));
-      if (!isNaN(qtd) && qtd > 0 && !isNaN(val)) {
-        const parcelaCalculada = (val / qtd).toFixed(2);
-        setValorParcela(parcelaCalculada);
-
-        const now = new Date();
-        const termino = new Date(now.setMonth(now.getMonth() + qtd));
-        const dataFormatada = `${("0" + (termino.getMonth() + 1)).slice(-2)}/${termino.getFullYear()}`;
-        setDataTermino(dataFormatada);
-      } else {
-        setValorParcela("");
-        setDataTermino("");
-      }
-    } else {
-      setValorParcela("");
-      setDataTermino("");
-    }
-  }, [tipo, valor, parcelas]);
 
   const gerarDescricaoPadrao = (tipo: string, valor: string): string => {
     switch (tipo) {
@@ -66,65 +44,77 @@ export default function MovimentacaoEntrada() {
     }
   };
 
-  const handleSalvar = () => {
+  const getApiUrl = async (): Promise<string> => {
+    const ip = await AsyncStorage.getItem("ipServidor");
+    if (!ip) throw new Error("IP do servidor não configurado.");
+    return `${ip}/transacoes`;
+  };
+
+  const handleSalvar = async () => {
     if (!valor) {
       Alert.alert("Erro", "Informe o valor da entrada.");
       return;
     }
 
-    if (tipo === "parcelado" && (!parcelas || parseInt(parcelas) <= 0)) {
-      Alert.alert("Erro", "Informe a quantidade de parcelas.");
-      return;
+    try {
+      setLoading(true);
+      const apiUrl = await getApiUrl();
+
+      const body = {
+        tipo: "entrada",
+        valor: parseFloat(valor.replace(",", ".")),
+        descricao: descricao.trim() || gerarDescricaoPadrao(tipo, valor),
+      };
+
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        throw new Error("Erro ao inserir a entrada.");
+      }
+
+      const novaTransacao: Transacao = await response.json();
+      setTransacoes((prev) => [novaTransacao, ...prev]);
+
+      // Limpar os campos
+      setValor("");
+      setTipo("avista");
+      setParcelas("");
+      setValorParcela("");
+      setDataTermino("");
+      setDescricao("");
+
+      Alert.alert("✅ Sucesso", "Entrada salva com sucesso!");
+
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Erro", "Não foi possível conectar ao servidor.");
+    } finally {
+      setLoading(false);
     }
-
-    const novaTransacao: Transacao = {
-      id: Date.now(),
-      valor,
-      tipo,
-      data: dataAtual,
-      parcelas,
-      valorParcela,
-      dataTermino,
-      descricao: descricao.trim() || gerarDescricaoPadrao(tipo, valor),
-    };
-
-    setTransacoes((prev) => [novaTransacao, ...prev]);
-
-    setValor("");
-    setTipo("avista");
-    setParcelas("");
-    setValorParcela("");
-    setDataTermino("");
-    setDescricao("");
   };
 
   const renderItem = ({ item }: { item: Transacao }) => (
     <View style={[styles.card, { backgroundColor: tema.sectionBoxBackground }]}>
-      <Text style={[styles.cardValor, { color: tema.linkColor }]}>💰 R$ {item.valor}</Text>
+      <Text style={[styles.cardValor, { color: tema.linkColor }]}>💰 R$ {item.valor.toFixed(2)}</Text>
       <Text style={[styles.cardInfo, { color: tema.textColor }]}>📝 {item.descricao}</Text>
       <Text style={[styles.cardInfo, { color: tema.textColor }]}>📅 {item.data}</Text>
       <Text style={[styles.cardInfo, { color: tema.textColor }]}>Tipo: {item.tipo}</Text>
-      {item.tipo === "parcelado" && (
-        <>
-          <Text style={[styles.cardInfo, { color: tema.textColor }]}>Parcelas: {item.parcelas}</Text>
-          <Text style={[styles.cardInfo, { color: tema.textColor }]}>Valor/Parcela: R$ {item.valorParcela}</Text>
-          <Text style={[styles.cardInfo, { color: tema.textColor }]}>Término: {item.dataTermino}</Text>
-        </>
-      )}
     </View>
   );
 
-  const botaoDesabilitado = !valor || (tipo === "parcelado" && (!parcelas || parseInt(parcelas) <= 0));
+  const botaoDesabilitado = !valor;
 
   return (
     <View style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
       <Text style={[styles.label, { color: tema.textColor }]}>Valor da Entrada (R$)</Text>
       <TextInput
-        style={[styles.input, {
-          borderColor: tema.inputBorderColor,
-          backgroundColor: tema.sectionBoxBackground,
-          color: tema.textColor,
-        }]}
+        style={[styles.input, { borderColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground, color: tema.textColor }]}
         keyboardType="numeric"
         placeholder="0,00"
         placeholderTextColor={tema.itemColor}
@@ -136,10 +126,7 @@ export default function MovimentacaoEntrada() {
       <Text style={[styles.texto, { color: tema.textColor }]}>{dataAtual}</Text>
 
       <Text style={[styles.label, { color: tema.textColor }]}>Tipo da Transação</Text>
-      <View style={[styles.pickerContainer, {
-        borderColor: tema.inputBorderColor,
-        backgroundColor: tema.sectionBoxBackground,
-      }]}>
+      <View style={[styles.pickerContainer, { borderColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground }]}>
         <Picker selectedValue={tipo} onValueChange={setTipo} style={{ color: "#000" }}>
           <Picker.Item label="À Vista" value="avista" />
           <Picker.Item label="Débito" value="debito" />
@@ -148,45 +135,9 @@ export default function MovimentacaoEntrada() {
         </Picker>
       </View>
 
-      {tipo === "parcelado" && (
-        <>
-          <Text style={[styles.label, { color: tema.textColor }]}>Quantidade de Parcelas *</Text>
-          <TextInput
-            style={[styles.input, {
-              borderColor: tema.inputBorderColor,
-              backgroundColor: tema.sectionBoxBackground,
-              color: tema.textColor,
-            }]}
-            keyboardType="numeric"
-            placeholder="Ex: 3"
-            placeholderTextColor={tema.itemColor}
-            value={parcelas}
-            onChangeText={setParcelas}
-          />
-
-          <Text style={[styles.label, { color: tema.textColor }]}>Valor por Parcela (calculado)</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: tema.sectionBoxBackground, color: tema.textColor }]}
-            value={valorParcela}
-            editable={false}
-          />
-
-          <Text style={[styles.label, { color: tema.textColor }]}>Data de Término</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: tema.sectionBoxBackground, color: tema.textColor }]}
-            value={dataTermino}
-            editable={false}
-          />
-        </>
-      )}
-
       <Text style={[styles.label, { color: tema.textColor }]}>Descrição (opcional)</Text>
       <TextInput
-        style={[styles.input, {
-          borderColor: tema.inputBorderColor,
-          backgroundColor: tema.sectionBoxBackground,
-          color: tema.textColor,
-        }]}
+        style={[styles.input, { borderColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground, color: tema.textColor }]}
         placeholder="Ex: Salário, venda, bônus..."
         placeholderTextColor={tema.itemColor}
         value={descricao}
@@ -196,9 +147,13 @@ export default function MovimentacaoEntrada() {
       <TouchableOpacity
         style={[styles.botao, botaoDesabilitado && { backgroundColor: tema.itemColor }]}
         onPress={handleSalvar}
-        disabled={botaoDesabilitado}
+        disabled={botaoDesabilitado || loading}
       >
-        <Text style={[styles.botaoTexto, botaoDesabilitado && { color: "#fff" }]}>Salvar Entrada</Text>
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.botaoTexto}>Salvar Entrada</Text>
+        )}
       </TouchableOpacity>
 
       <Text style={[styles.label, { marginTop: 32, color: tema.textColor }]}>Entradas Registradas</Text>

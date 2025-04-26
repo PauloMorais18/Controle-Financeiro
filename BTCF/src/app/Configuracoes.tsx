@@ -1,12 +1,37 @@
-// Configuracoes.js
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView, Alert, TextInput } from "react-native";
 import { useTheme } from "./ThemeContext"; // Ajuste o caminho conforme necessário
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function Configuracoes() {
   const { temaEscuro, setTemaEscuro, tema } = useTheme();
-  const [emailExportacao, setEmailExportacao] = React.useState("usuario@email.com");
-  const [notificacoes, setNotificacoes] = React.useState(true);
+  const [emailExportacao, setEmailExportacao] = useState("usuario@email.com");
+  const [notificacoes, setNotificacoes] = useState(true);
+  const [ipServidor, setIpServidor] = useState("");
+
+  useEffect(() => {
+    async function carregarIP() {
+      const ipSalvo = await AsyncStorage.getItem("ipServidor");
+      if (ipSalvo) {
+        setIpServidor(ipSalvo);
+      }
+    }
+    carregarIP();
+  }, []);
+
+  async function handleSalvarIP() {
+    if (!ipServidor) {
+      Alert.alert("Erro", "Digite um IP válido.");
+      return;
+    }
+    try {
+      await AsyncStorage.setItem("ipServidor", ipServidor);
+      Alert.alert("✅ Sucesso", "IP do servidor salvo!");
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Erro", "Não foi possível salvar o IP.");
+    }
+  }
 
   function handleExportarDados() {
     Alert.alert("Exportar Dados", `Os dados foram enviados para: ${emailExportacao}`);
@@ -16,8 +41,8 @@ export default function Configuracoes() {
     <ScrollView style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>👤 Perfil</Text>
       <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground, shadowColor: tema.shadowColor }]}>
-        <Text style={[styles.item, { color: tema.itemColor }]}>Nome: Michele</Text>
-        <Text style={[styles.item, { color: tema.itemColor }]}>E-mail: michele@email.com</Text>
+        <Text style={[styles.item, { color: tema.itemColor }]}>Nome: Usuário</Text>
+        <Text style={[styles.item, { color: tema.itemColor }]}>E-mail: usuario@email.com</Text>
         <View style={styles.rowButtons}>
           <TouchableOpacity style={styles.button}>
             <Text style={styles.buttonText}>Editar Perfil</Text>
@@ -38,6 +63,22 @@ export default function Configuracoes() {
           <Text style={[styles.item, { color: tema.itemColor }]}>Notificações</Text>
           <Switch value={notificacoes} onValueChange={setNotificacoes} />
         </View>
+      </View>
+
+      <Text style={[styles.sectionTitle, { color: tema.textColor }]}>🌐 Configurações do Servidor</Text>
+      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground, shadowColor: tema.shadowColor }]}>
+        <Text style={[styles.item, { color: tema.itemColor }]}>Endereço IP do servidor:</Text>
+        <TextInput
+          style={[styles.input, { backgroundColor: tema.inputBackground, borderColor: tema.inputBorderColor, color: tema.textColor }]}
+          placeholder="http://192.168.0.100:3000"
+          placeholderTextColor={tema.itemColor}
+          value={ipServidor}
+          onChangeText={setIpServidor}
+          autoCapitalize="none"
+        />
+        <TouchableOpacity style={styles.button} onPress={handleSalvarIP}>
+          <Text style={styles.buttonText}>Salvar IP</Text>
+        </TouchableOpacity>
       </View>
 
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>📁 Dados</Text>

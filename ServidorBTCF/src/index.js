@@ -8,11 +8,12 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
+// 🌐 Rota de teste
 app.get('/', (req, res) => {
   res.send('Servidor BTCF está rodando!');
 });
 
-// ✅ Rota para testar conexão com o banco de dados
+// ✅ Teste de conexão com o banco
 app.get('/testdb', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');
@@ -30,24 +31,25 @@ app.get('/testdb', async (req, res) => {
   }
 });
 
-app.get('/transacoes', async (req, res) => {
+// 🔄 GET - Listar todas as entradas
+app.get('/entrada', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM transacoes');
+    const result = await pool.query('SELECT * FROM "entrada" ORDER BY chave DESC');
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
 });
 
-// ➕ Rota para adicionar transações
-app.post('/transacoes', async (req, res) => {
+// ➕ POST - Inserir nova entrada
+app.post('/entrada', async (req, res) => {
   const { tipo, valor, descricao } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO transacoes (tipo, valor, descricao) VALUES ($1, $2, $3) RETURNING *',
+      'INSERT INTO "entrada" (tipo, valor, descricao, datacad) VALUES ($1, $2, $3, NOW()) RETURNING *',
       [tipo, valor, descricao]
     );
-    res.json(result.rows[0]);
+    res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
