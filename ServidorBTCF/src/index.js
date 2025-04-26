@@ -43,14 +43,20 @@ app.get('/entrada', async (req, res) => {
 
 // ➕ POST - Inserir nova entrada
 app.post('/entrada', async (req, res) => {
-  const { tipo, valor, descricao } = req.body;
+  const { tipo, valor, descricao, qtdeparc, valorparc, datafimparc } = req.body;
+
   try {
     const result = await pool.query(
-      'INSERT INTO "entrada" (tipo, valor, descricao, datacad) VALUES ($1, $2, $3, NOW()) RETURNING *',
-      [tipo, valor, descricao]
+      `INSERT INTO "entrada" 
+        (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc)
+       VALUES ($1, $2, $3, NOW(), $4, $5, $6) 
+       RETURNING *`,
+      [tipo, valor, descricao, qtdeparc, valorparc, datafimparc]
     );
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
