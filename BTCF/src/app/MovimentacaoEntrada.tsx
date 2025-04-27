@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { useTheme } from "./ThemeContext";
-import { postEntrada } from "./funcoes"; // Importa a função da API
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type Transacao = {
   id: number;
@@ -62,6 +62,12 @@ export default function MovimentacaoEntrada() {
     return `Ganho ${tipo === "parcelado" ? "parcelado" : "à vista"} de R$ ${valor}`;
   };
 
+  const getApiUrl = async (): Promise<string> => {
+    const ip = await AsyncStorage.getItem("ipServidor");
+    if (!ip) throw new Error("IP do servidor não configurado.");
+    return `${ip}/entrada`;
+  };
+
   const handleSalvar = async () => {
     if (!valor || (tipo === "parcelado" && (!parcelas || parseInt(parcelas) <= 0))) {
       Alert.alert("Erro", "Preencha corretamente os campos obrigatórios.");
@@ -84,7 +90,19 @@ export default function MovimentacaoEntrada() {
         datafimparc: dataFimParcelas,
       };
 
-      const resposta = await postEntrada(body);
+      const apiUrl = await getApiUrl();
+
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        throw new Error("Erro ao inserir a entrada");
+      }
+
+      const resposta = await response.json();
 
       const novaTransacao: Transacao = {
         id: resposta.chave,
@@ -116,9 +134,13 @@ export default function MovimentacaoEntrada() {
 
   const renderItem = ({ item }: { item: Transacao }) => (
     <View style={[styles.card, { backgroundColor: tema.sectionBoxBackground }]}>
-      <Text style={[styles.cardValor, { color: tema.linkColor }]}>💰 {item.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</Text>
+      <Text style={[styles.cardValor, { color: tema.linkColor }]}>
+        💰 {item.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+      </Text>
       <Text style={[styles.cardInfo, { color: tema.textColor }]}>📝 {item.descricao}</Text>
-      <Text style={[styles.cardInfo, { color: tema.textColor }]}>📅 {new Date(item.data).toLocaleDateString("pt-BR")}</Text>
+      <Text style={[styles.cardInfo, { color: tema.textColor }]}>
+        📅 {new Date(item.data).toLocaleDateString("pt-BR")}
+      </Text>
       <Text style={[styles.cardInfo, { color: tema.textColor }]}>Tipo: {item.tipo}</Text>
     </View>
   );

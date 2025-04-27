@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, Switch, TouchableOpacity, ScrollView, Alert, TextInput } from "react-native";
-import { useTheme } from "./ThemeContext"; // Ajuste o caminho conforme necessário
+import { useTheme } from "./ThemeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function Configuracoes() {
@@ -10,18 +10,16 @@ export default function Configuracoes() {
   const [ipServidor, setIpServidor] = useState("");
 
   useEffect(() => {
-    async function carregarIP() {
+    async function carregarConfiguracoes() {
       const ipSalvo = await AsyncStorage.getItem("ipServidor");
-      if (ipSalvo) {
-        setIpServidor(ipSalvo);
-      }
+      if (ipSalvo) setIpServidor(ipSalvo);
     }
-    carregarIP();
+    carregarConfiguracoes();
   }, []);
 
   async function handleSalvarIP() {
-    if (!ipServidor) {
-      Alert.alert("Erro", "Digite um IP válido.");
+    if (!ipServidor.startsWith("http://") && !ipServidor.startsWith("https://")) {
+      Alert.alert("Erro", "O IP deve começar com http:// ou https://");
       return;
     }
     try {
@@ -40,7 +38,7 @@ export default function Configuracoes() {
   return (
     <ScrollView style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>👤 Perfil</Text>
-      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground, shadowColor: tema.shadowColor }]}>
+      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground }]}>
         <Text style={[styles.item, { color: tema.itemColor }]}>Nome: Usuário</Text>
         <Text style={[styles.item, { color: tema.itemColor }]}>E-mail: usuario@email.com</Text>
         <View style={styles.rowButtons}>
@@ -54,7 +52,7 @@ export default function Configuracoes() {
       </View>
 
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>⚙️ Preferências</Text>
-      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground, shadowColor: tema.shadowColor }]}>
+      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground }]}>
         <View style={styles.toggleRow}>
           <Text style={[styles.item, { color: tema.itemColor }]}>Tema Escuro</Text>
           <Switch value={temaEscuro} onValueChange={setTemaEscuro} />
@@ -66,10 +64,10 @@ export default function Configuracoes() {
       </View>
 
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>🌐 Configurações do Servidor</Text>
-      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground, shadowColor: tema.shadowColor }]}>
+      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground }]}>
         <Text style={[styles.item, { color: tema.itemColor }]}>Endereço IP do servidor:</Text>
         <TextInput
-          style={[styles.input, { backgroundColor: tema.inputBackground, borderColor: tema.inputBorderColor, color: tema.textColor }]}
+          style={[styles.input, { backgroundColor: tema.sectionBoxBackground, borderColor: tema.inputBorderColor, color: tema.textColor }]}
           placeholder="http://192.168.0.100:3000"
           placeholderTextColor={tema.itemColor}
           value={ipServidor}
@@ -82,10 +80,10 @@ export default function Configuracoes() {
       </View>
 
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>📁 Dados</Text>
-      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground, shadowColor: tema.shadowColor }]}>
+      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground }]}>
         <Text style={[styles.item, { color: tema.itemColor }]}>E-mail para exportação:</Text>
         <TextInput
-          style={[styles.input, { backgroundColor: tema.inputBackground, borderColor: tema.inputBorderColor, color: tema.textColor }]}
+          style={[styles.input, { backgroundColor: tema.sectionBoxBackground, borderColor: tema.inputBorderColor, color: tema.textColor }]}
           value={emailExportacao}
           onChangeText={setEmailExportacao}
           keyboardType="email-address"
@@ -99,7 +97,7 @@ export default function Configuracoes() {
       </View>
 
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>❓ Sobre</Text>
-      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground, shadowColor: tema.shadowColor }]}>
+      <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground }]}>
         <Text style={[styles.item, { color: tema.itemColor }]}>Versão: 1.0.0</Text>
         <Text style={[styles.link, { color: tema.linkColor }]}>Política de Privacidade</Text>
         <Text style={[styles.link, { color: tema.linkColor }]}>Suporte</Text>
@@ -109,63 +107,14 @@ export default function Configuracoes() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 40,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginTop: 30,
-    marginBottom: 12,
-  },
-  sectionBox: {
-    padding: 18,
-    borderRadius: 12,
-    marginBottom: 24,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  item: {
-    fontSize: 16,
-    marginBottom: 10,
-  },
-  toggleRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  button: {
-    backgroundColor: "#1976D2",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    marginVertical: 6,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    textAlign: "center",
-  },
-  rowButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  link: {
-    fontSize: 16,
-    textDecorationLine: "underline",
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 16,
-    marginBottom: 12,
-  },
+  container: { flex: 1, paddingHorizontal: 20, paddingTop: 40 },
+  sectionTitle: { fontSize: 20, fontWeight: "600", marginTop: 30, marginBottom: 12 },
+  sectionBox: { padding: 18, borderRadius: 12, marginBottom: 24, elevation: 3 },
+  item: { fontSize: 16, marginBottom: 10 },
+  toggleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  button: { backgroundColor: "#1976D2", paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, marginVertical: 6 },
+  buttonText: { color: "#fff", fontSize: 16, textAlign: "center" },
+  rowButtons: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
+  link: { fontSize: 16, textDecorationLine: "underline", marginBottom: 8 },
+  input: { borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 16, marginBottom: 12 },
 });
