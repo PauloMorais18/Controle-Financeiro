@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -10,17 +10,15 @@ import {
 } from "react-native";
 import { PieChart } from "react-native-chart-kit";
 import { useRouter } from "expo-router";
-import { DrawerActions } from "@react-navigation/native";
-import Index from ".";
-import { useTheme } from "./ThemeContext"; // Importa o hook useTheme
+import { useTheme } from "./ThemeContext"; // Mantém apenas o useTheme aqui!
 
 const screenWidth = Dimensions.get("window").width;
 
 export default function Principal() {
   const router = useRouter();
-  const { tema, temaEscuro } = useTheme(); // Acessa o tema e o estado temaEscuro
+  const { tema, temaEscuro } = useTheme();
   const [showActions, setShowActions] = useState(false);
-  const [showValue, setShowValue] = useState(false); // Estado para exibir/ocultar valor
+  const [showValue, setShowValue] = useState(false);
 
   const chartData = [
     { name: "Alimentação", population: 33.3, color: "#4caf50", legendFontColor: tema.textColor, legendFontSize: 12 },
@@ -32,13 +30,14 @@ export default function Principal() {
 
   return (
     <View style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
-      {/* Cabeçalho com fundo dinâmico: preto no tema escuro, azul no tema claro */}
+      
+      {/* Cabeçalho */}
       <View style={[styles.header, { backgroundColor: temaEscuro ? "#222222" : tema.linkColor }]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity onPress={() => router.push("/Perfil")}>
             <Text style={[styles.menu, { color: "#FFFFFF" }]}>👤</Text>
           </TouchableOpacity>
-          <Text style={[styles.title, { color: "#FFFFFF" }]}>Nome, Usuario</Text>
+          <Text style={[styles.title, { color: "#FFFFFF" }]}>Nome, Usuário</Text>
         </View>
         <TouchableOpacity onPress={() => setShowValue(!showValue)}>
           <View style={styles.logo}>
@@ -77,7 +76,6 @@ export default function Principal() {
       </View>
 
       {/* Botões de ação */}
-      {/* Botões expandidos animados */}
       {showActions && (
         <Animated.View style={[styles.actionButtons, { opacity: 1, transform: [{ translateY: -10 }] }]}>
           <TouchableOpacity
@@ -97,10 +95,10 @@ export default function Principal() {
 
       {/* Botão principal */}
       <TouchableOpacity
-        style={[styles.fab, { backgroundColor: temaEscuro ? "#fff" : tema.linkColor }]} // Fundo dinâmico: branco no tema escuro, azul no tema claro
+        style={[styles.fab, { backgroundColor: temaEscuro ? "#fff" : tema.linkColor }]}
         onPress={() => setShowActions((prev) => !prev)}
       >
-        <Text style={[styles.fabText, { color: "#111" }]}>+</Text> {/* "+" em preto */}
+        <Text style={[styles.fabText, { color: "#111" }]}>+</Text>
       </TouchableOpacity>
     </View>
   );
@@ -110,7 +108,6 @@ export const drawerLabel = "📊 Dashboard";
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -143,7 +140,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
-
   list: {
     marginTop: 20,
     paddingHorizontal: 24,

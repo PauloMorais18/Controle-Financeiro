@@ -102,21 +102,19 @@ export default function Login() {
         onChangeText={setSenha}
       />
 
-      <Animated.View style={{ transform: [{ scale }] }}>
+      <Animated.View style={{ transform: [{ scale }], alignItems: "center" }}>
         <TouchableOpacity
           style={[styles.botao, (!email || !senha || loading) && { backgroundColor: "#999" }]}
           onPress={handleLogin}
           disabled={!email || !senha || loading}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.botaoTexto}>Entrar</Text>
-          )}
+          <Text style={styles.botaoTexto}>
+            {loading ? "Entrando..." : "Entrar"}
+          </Text>
         </TouchableOpacity>
       </Animated.View>
 
-      <Animated.View style={{ transform: [{ scale: scaleCadastro }] }}>
+      <Animated.View style={{ transform: [{ scale: scaleCadastro }], marginTop: 16 }}>
         <Pressable onPress={handleCadastro}>
           <Text style={styles.linkText}>Não tem conta? Cadastre-se</Text>
         </Pressable>
@@ -127,9 +125,9 @@ export default function Login() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 32, justifyContent: "center" },
-  title: { fontSize: 24, fontWeight: "bold", marginBottom: 24 },
+  title: { fontSize: 24, fontWeight: "bold", marginBottom: 24, textAlign: "center" },
   input: { height: 50, borderColor: "#ccc", borderWidth: 1, borderRadius: 8, paddingHorizontal: 16, marginBottom: 16 },
   linkText: { marginTop: 16, color: "#007bff", textAlign: "center", fontSize: 16 },
-  botao: { backgroundColor: "#4CAF50", paddingVertical: 14, borderRadius: 8, alignItems: "center" },
+  botao: { backgroundColor: "#4CAF50", paddingVertical: 14, paddingHorizontal: 50, borderRadius: 8, alignItems: "center" },
   botaoTexto: { color: "#fff", fontSize: 16, fontWeight: "bold" },
 });
