@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   Alert,
   Dimensions,
   Animated,
+  FlatList,
 } from "react-native";
 import { PieChart } from "react-native-chart-kit";
 import { useRouter } from "expo-router";
-import { useTheme } from "./ThemeContext"; // Mantém apenas o useTheme aqui!
+import { useTheme } from "./ThemeContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -19,6 +21,40 @@ export default function Principal() {
   const { tema, temaEscuro } = useTheme();
   const [showActions, setShowActions] = useState(false);
   const [showValue, setShowValue] = useState(false);
+  const [grupos, setGrupos] = useState([]);
+  const [grupoSelecionado, setGrupoSelecionado] = useState(null);
+  const [dataAtual, setDataAtual] = useState(new Date().toISOString().split("T")[0]);
+  const [saldo, setSaldo] = useState(0);
+
+  useEffect(() => {
+    carregarGrupos();
+  }, []);
+
+  async function carregarGrupos() {
+    try {
+      const email = await AsyncStorage.getItem("usuarioEmail");
+      const ip = await AsyncStorage.getItem("ipServidor");
+      if (!email || !ip) throw new Error("Dados de autenticação ausentes.");
+
+      const usuarioRes = await fetch(`${ip}/usuario/por-email/${email}`);
+      if (!usuarioRes.ok) throw new Error("Usuário não encontrado.");
+      const usuario = await usuarioRes.json();
+
+      const gruposRes = await fetch(`${ip}/grupo/usuario/${usuario.chave}`);
+      if (!gruposRes.ok) throw new Error("Erro ao buscar grupos.");
+      const gruposData = await gruposRes.json();
+      setGrupos(gruposData);
+      if (gruposData.length > 0) setGrupoSelecionado(gruposData[0].chave);
+    } catch (error) {
+      Alert.alert("Erro ao carregar grupos", error.message);
+    }
+  }
+
+  function mudarData(direcao) {
+    const novaData = new Date(dataAtual);
+    novaData.setMonth(novaData.getMonth() + direcao);
+    setDataAtual(novaData.toISOString().split("T")[0]);
+  }
 
   const chartData = [
     { name: "Alimentação", population: 33.3, color: "#4caf50", legendFontColor: tema.textColor, legendFontSize: 12 },
@@ -30,23 +66,55 @@ export default function Principal() {
 
   return (
     <View style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
-      
       {/* Cabeçalho */}
       <View style={[styles.header, { backgroundColor: temaEscuro ? "#222222" : tema.linkColor }]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity onPress={() => router.push("/Perfil")}>
             <Text style={[styles.menu, { color: "#FFFFFF" }]}>👤</Text>
           </TouchableOpacity>
-          <Text style={[styles.title, { color: "#FFFFFF" }]}>Nome, Usuário</Text>
+          <Text style={[styles.title, { color: "#FFFFFF" }]}>Painel Financeiro</Text>
         </View>
         <TouchableOpacity onPress={() => setShowValue(!showValue)}>
           <View style={styles.logo}>
             <Text style={[styles.logoIcon, { color: "#FFFFFF" }]}>💲</Text>
             <Text style={[styles.logoText, { color: "#FFFFFF" }]}>
-              {showValue ? "R$ 3.000,00" : "XXXXXX"}
+              {showValue ? `R$ ${saldo.toFixed(2)}` : "XXXXXX"}
             </Text>
           </View>
         </TouchableOpacity>
+      </View>
+
+      {/* Filtros */}
+      <View style={{ flexDirection: "row", justifyContent: "space-between", margin: 16 }}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <TouchableOpacity onPress={() => mudarData(-1)}>
+            <Text style={{ fontSize: 18, color: tema.textColor }}>◀️</Text>
+          </TouchableOpacity>
+          <Text style={{ marginHorizontal: 10, color: tema.textColor }}>{dataAtual.slice(0, 7)}</Text>
+          <TouchableOpacity onPress={() => mudarData(1)}>
+            <Text style={{ fontSize: 18, color: tema.textColor }}>▶️</Text>
+          </TouchableOpacity>
+        </View>
+
+        <FlatList
+          horizontal
+          data={grupos}
+          keyExtractor={(item) => item.chave.toString()}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              onPress={() => setGrupoSelecionado(item.chave)}
+              style={{
+                backgroundColor: grupoSelecionado === item.chave ? tema.linkColor : tema.inputBackground,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 12,
+                marginLeft: 8,
+              }}
+            >
+              <Text style={{ color: tema.textColor }}>{item.nome}</Text>
+            </TouchableOpacity>
+          )}
+        />
       </View>
 
       {/* Gráfico */}
@@ -64,16 +132,6 @@ export default function Principal() {
         center={[5, 0]}
         absolute
       />
-
-      {/* Lista */}
-      <View style={styles.list}>
-        {Array.from({ length: 4 }).map((_, index) => (
-          <View key={index} style={styles.listItem}>
-            <View style={[styles.bullet, { backgroundColor: tema.textColor }]} />
-            <View style={[styles.line, { backgroundColor: tema.itemColor }]} />
-          </View>
-        ))}
-      </View>
 
       {/* Botões de ação */}
       {showActions && (
@@ -139,25 +197,6 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 16,
     fontWeight: "bold",
-  },
-  list: {
-    marginTop: 20,
-    paddingHorizontal: 24,
-  },
-  listItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 12,
-  },
-  bullet: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 14,
-  },
-  line: {
-    height: 2,
-    flex: 1,
   },
   fab: {
     position: "absolute",

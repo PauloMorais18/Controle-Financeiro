@@ -16,6 +16,7 @@ export default function GerenciarGrupo() {
   const [grupos, setGrupos] = useState<any[]>([]);
   const [emailParaAdicionar, setEmailParaAdicionar] = useState("");
   const [grupoSelecionado, setGrupoSelecionado] = useState<number | null>(null);
+  const [membrosGrupo, setMembrosGrupo] = useState<{ [grupoId: number]: any[] }>({});
 
   useEffect(() => {
     carregarGruposDoUsuario();
@@ -39,6 +40,23 @@ export default function GerenciarGrupo() {
     } catch (error: any) {
       console.error(error);
       Alert.alert("Erro", error.message);
+    }
+  }
+
+  async function buscarMembrosDoGrupo(grupoId: number) {
+    try {
+      const ip = await AsyncStorage.getItem("ipServidor");
+      if (!ip) throw new Error("IP do servidor não configurado.");
+
+      const res = await fetch(`${ip}/grupo/${grupoId}/membros`);
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.erro || "Erro ao buscar membros");
+
+      setMembrosGrupo((prev) => ({ ...prev, [grupoId]: data }));
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert("Erro ao buscar membros", error.message);
     }
   }
 
@@ -66,7 +84,7 @@ export default function GerenciarGrupo() {
 
       Alert.alert("✅ Sucesso", data.mensagem);
       setEmailParaAdicionar("");
-      setGrupoSelecionado(null);
+      await buscarMembrosDoGrupo(grupoId); // Atualiza lista de membros
     } catch (error: any) {
       Alert.alert("Erro ao adicionar pessoa ao grupo", error.message);
     }
@@ -105,10 +123,28 @@ export default function GerenciarGrupo() {
                 >
                   <Text style={styles.botaoTexto}>Confirmar</Text>
                 </TouchableOpacity>
+
+                {/* Mostrar membros */}
+                {membrosGrupo[item.chave] && (
+                  <View style={{ marginTop: 10 }}>
+                    <Text style={{ color: tema.itemColor, fontWeight: "bold" }}>Membros:</Text>
+                    {membrosGrupo[item.chave].map((membro, i) => (
+                    <Text key={i} style={{ color: tema.textColor, marginLeft: 10 }}>
+                        {membro.lider ? "👑 " : "👤 "}
+                        {membro.nome} ({membro.email})
+                    </Text>
+                    ))}
+                  </View>
+                )}
               </>
             ) : (
-              <TouchableOpacity onPress={() => setGrupoSelecionado(item.chave)}>
-                <Text style={{ color: tema.linkColor }}>➕ Adicionar pessoa</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setGrupoSelecionado(item.chave);
+                  buscarMembrosDoGrupo(item.chave);
+                }}
+              >
+                <Text style={{ color: tema.linkColor }}>👥 Adicionar pessoa</Text>
               </TouchableOpacity>
             )}
           </View>

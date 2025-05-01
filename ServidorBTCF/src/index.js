@@ -8,12 +8,10 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// 🌐 Rota de teste
 app.get('/', (req, res) => {
   res.send('Servidor BTCF está rodando!');
 });
 
-// ✅ Teste de conexão com o banco
 app.get('/testdb', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');
@@ -159,8 +157,8 @@ app.post('/grupo', async (req, res) => {
     const grupoCriado = grupoResult.rows[0];
 
     await pool.query(
-      `INSERT INTO "pessoasgrupo" (chaveusuario, chavegrupo)
-       VALUES ($1, $2)`,
+      `INSERT INTO "pessoasgrupo" (chaveusuario, chavegrupo, lider)
+       VALUES ($1, $2, true)`,
       [chaveusuario, grupoCriado.chave]
     );
 
@@ -194,12 +192,27 @@ app.post('/grupo/adicionar-pessoa', async (req, res) => {
     }
 
     await pool.query(
-      `INSERT INTO "pessoasgrupo" (chaveusuario, chavegrupo)
-       VALUES ($1, $2)`,
+      `INSERT INTO "pessoasgrupo" (chaveusuario, chavegrupo, lider)
+       VALUES ($1, $2, false)`,
       [chaveusuario, chavegrupo]
     );
 
     res.status(201).json({ mensagem: "Usuário adicionado ao grupo com sucesso!" });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/grupo/:grupoId/membros', async (req, res) => {
+  const { grupoId } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT u.nome, u.email, pg.lider FROM "usuario" u
+       JOIN "pessoasgrupo" pg ON u.chave = pg.chaveusuario
+       WHERE pg.chavegrupo = $1`,
+      [grupoId]
+    );
+    res.status(200).json(result.rows);
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
