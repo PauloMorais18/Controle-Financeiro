@@ -1,6 +1,10 @@
 import React from "react";
 import { Drawer } from "expo-router/drawer";
-import { DrawerContentScrollView, DrawerItem, DrawerContentComponentProps } from "@react-navigation/drawer";
+import {
+  DrawerContentScrollView,
+  DrawerItem,
+  DrawerContentComponentProps,
+} from "@react-navigation/drawer";
 import { Text, View } from "react-native";
 import { ThemeProvider, useTheme } from "./ThemeContext";
 
@@ -35,6 +39,7 @@ function DrawerWithTheme() {
       <Drawer.Screen name="Perfil" options={{ title: "Perfil" }} />
       <Drawer.Screen name="Principal" options={{ title: "Principal" }} />
       <Drawer.Screen name="Grupo" options={{ title: "Criar Grupo" }} />
+      <Drawer.Screen name="GerenciarGrupo" options={{ title: "Gerenciar Grupos" }} />
       <Drawer.Screen name="MovimentacaoEntrada" options={{ title: "Entrada" }} />
       <Drawer.Screen name="MovimentacaoSaida" options={{ title: "Saída" }} />
       <Drawer.Screen name="Analise" options={{ title: "Análise" }} />
@@ -46,11 +51,10 @@ function DrawerWithTheme() {
 
 function CustomDrawerContent(props: DrawerContentComponentProps) {
   const { navigation } = props;
-  const { tema, temaEscuro } = useTheme(); // Acessa o tema para estilizar o Drawer
+  const { tema, temaEscuro } = useTheme();
 
-  // Define as cores com base no tema
-  const itemBackgroundColor = tema.backgroundColor; // Mesmo fundo da gaveta
-  const activeBackgroundColor = temaEscuro ? "#555" : "#e0e0e0"; // Fundo ao interagir
+  const itemBackgroundColor = tema.backgroundColor;
+  const activeBackgroundColor = temaEscuro ? "#555" : "#e0e0e0";
 
   return (
     <DrawerContentScrollView
@@ -74,7 +78,7 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
           activeBackgroundColor={activeBackgroundColor}
         />
         <DrawerItem
-          label="👤 Principal"
+          label="📋 Principal"
           onPress={() => navigation.navigate("Principal")}
           labelStyle={{ color: tema.textColor }}
           style={{ backgroundColor: itemBackgroundColor }}
@@ -83,6 +87,13 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         <DrawerItem
           label="👥 Criar Grupo"
           onPress={() => navigation.navigate("Grupo")}
+          labelStyle={{ color: tema.textColor }}
+          style={{ backgroundColor: itemBackgroundColor }}
+          activeBackgroundColor={activeBackgroundColor}
+        />
+        <DrawerItem
+          label="🛠️ Gerenciar Grupos"
+          onPress={() => navigation.navigate("GerenciarGrupo")}
           labelStyle={{ color: tema.textColor }}
           style={{ backgroundColor: itemBackgroundColor }}
           activeBackgroundColor={activeBackgroundColor}

@@ -16,6 +16,7 @@ export default function Cadastro() {
 
   const router = useRouter();
   const scaleBack = useRef(new Animated.Value(1)).current;
+  const scaleServidor = useRef(new Animated.Value(1)).current;
 
   function animateButton(scaleRef: Animated.Value) {
     Animated.sequence([
@@ -28,6 +29,13 @@ export default function Cadastro() {
     animateButton(scaleBack);
     setTimeout(() => {
       router.replace("/");
+    }, 200);
+  }
+
+  function irParaServidor() {
+    animateButton(scaleServidor);
+    setTimeout(() => {
+      router.push("/Servidor");
     }, 200);
   }
 
@@ -55,7 +63,6 @@ export default function Cadastro() {
       if (!ipServidor) throw new Error("IP do servidor não configurado");
 
       const apiUrl = `${ipServidor}/usuario`;
-
       const body = { nome, email, senha };
 
       const response = await fetch(apiUrl, {
@@ -147,6 +154,12 @@ export default function Cadastro() {
       <Animated.View style={{ transform: [{ scale: scaleBack }], marginTop: 12 }}>
         <Pressable onPress={voltarParaLogin}>
           <Text style={styles.voltarText}>Voltar para o login</Text>
+        </Pressable>
+      </Animated.View>
+
+      <Animated.View style={{ transform: [{ scale: scaleServidor }], marginTop: 12 }}>
+        <Pressable onPress={irParaServidor}>
+          <Text style={styles.voltarText}>Configurar servidor</Text>
         </Pressable>
       </Animated.View>
     </View>

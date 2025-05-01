@@ -67,16 +67,18 @@ export default function Configuracoes() {
       <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground }]}>
         <Text style={[styles.item, { color: tema.itemColor }]}>Endereço IP do servidor:</Text>
         <TextInput
-          style={[styles.input, { backgroundColor: tema.sectionBoxBackground, borderColor: tema.inputBorderColor, color: tema.textColor }]}
-          placeholder="http://192.168.0.100:3000"
-          placeholderTextColor={tema.itemColor}
+          style={[
+            styles.input,
+            {
+              backgroundColor: "#e0e0e0", // cor acinzentada para mostrar que está desabilitado
+              borderColor: tema.inputBorderColor,
+              color: "#888",
+            },
+          ]}
           value={ipServidor}
-          onChangeText={setIpServidor}
-          autoCapitalize="none"
+          editable={false}
+          selectTextOnFocus={false}
         />
-        <TouchableOpacity style={styles.button} onPress={handleSalvarIP}>
-          <Text style={styles.buttonText}>Salvar IP</Text>
-        </TouchableOpacity>
       </View>
 
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>📁 Dados</Text>

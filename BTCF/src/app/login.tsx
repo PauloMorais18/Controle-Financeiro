@@ -1,4 +1,14 @@
-import { View, Text, TextInput, StyleSheet, Alert, Pressable, Animated, ActivityIndicator, TouchableOpacity } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  Alert,
+  Pressable,
+  Animated,
+  ActivityIndicator,
+  TouchableOpacity,
+} from "react-native";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -11,6 +21,7 @@ export default function Login() {
 
   const scale = useRef(new Animated.Value(1)).current;
   const scaleCadastro = useRef(new Animated.Value(1)).current;
+  const scaleServidor = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     async function carregarCredenciaisSalvas() {
@@ -82,6 +93,13 @@ export default function Login() {
     }, 200);
   }
 
+  function handleServidor() {
+    animateButton(scaleServidor);
+    setTimeout(() => {
+      router.push("/Servidor");
+    }, 200);
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Login</Text>
@@ -119,6 +137,12 @@ export default function Login() {
           <Text style={styles.linkText}>Não tem conta? Cadastre-se</Text>
         </Pressable>
       </Animated.View>
+
+      <Animated.View style={{ transform: [{ scale: scaleServidor }], marginTop: 8 }}>
+        <Pressable onPress={handleServidor}>
+          <Text style={[styles.linkText, { fontSize: 14 }]}>🌐 Configurar servidor</Text>
+        </Pressable>
+      </Animated.View>
     </View>
   );
 }
@@ -126,8 +150,30 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 32, justifyContent: "center" },
   title: { fontSize: 24, fontWeight: "bold", marginBottom: 24, textAlign: "center" },
-  input: { height: 50, borderColor: "#ccc", borderWidth: 1, borderRadius: 8, paddingHorizontal: 16, marginBottom: 16 },
-  linkText: { marginTop: 16, color: "#007bff", textAlign: "center", fontSize: 16 },
-  botao: { backgroundColor: "#4CAF50", paddingVertical: 14, paddingHorizontal: 50, borderRadius: 8, alignItems: "center" },
-  botaoTexto: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  input: {
+    height: 50,
+    borderColor: "#ccc",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  linkText: {
+    marginTop: 16,
+    color: "#007bff",
+    textAlign: "center",
+    fontSize: 16,
+  },
+  botao: {
+    backgroundColor: "#4CAF50",
+    paddingVertical: 14,
+    paddingHorizontal: 50,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  botaoTexto: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
 });

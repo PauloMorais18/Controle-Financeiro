@@ -1,5 +1,4 @@
-// Grupo.tsx
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -9,144 +8,137 @@ import {
   StyleSheet,
   Alert,
 } from "react-native";
-import { useTheme } from "./ThemeContext"; // Importa o hook useTheme
+import { useTheme } from "./ThemeContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+interface Grupo {
+  chave: number;
+  nome: string;
+  descricao: string;
+  criado_em: string;
+}
 
 export default function Grupo() {
-  const { tema } = useTheme(); // Acessa o tema atual
-  const [grupoCriado, setGrupoCriado] = useState(false);
+  const { tema } = useTheme();
   const [nomeGrupo, setNomeGrupo] = useState("");
-  const [membros, setMembros] = useState<string[]>([]);
-  const [novoMembro, setNovoMembro] = useState("");
-  const [modoEdicao, setModoEdicao] = useState<number | null>(null);
+  const [descricaoGrupo, setDescricaoGrupo] = useState("");
+  const [grupos, setGrupos] = useState<Grupo[]>([]);
 
-  function criarGrupo() {
+  useEffect(() => {
+    listarGrupos();
+  }, []);
+
+  async function listarGrupos() {
+    try {
+      const ip = await AsyncStorage.getItem("ipServidor");
+      if (!ip) throw new Error("IP do servidor não configurado.");
+
+      const response = await fetch(`${ip}/grupo`);
+      if (!response.ok) throw new Error("Erro ao buscar grupos");
+      const data = await response.json();
+      setGrupos(data);
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert("Erro ao carregar grupos", error.message);
+    }
+  }
+
+  async function criarGrupo() {
     if (nomeGrupo.trim().length === 0) {
-      Alert.alert("Erro", "Digite um nome para o grupo.");
-      return;
-    }
-    setGrupoCriado(true);
-  }
-
-  function adicionarMembro() {
-    if (novoMembro.trim().length === 0) return;
-
-    if (modoEdicao !== null) {
-      const membrosAtualizados = [...membros];
-      membrosAtualizados[modoEdicao] = novoMembro;
-      setMembros(membrosAtualizados);
-      setModoEdicao(null);
-    } else {
-      setMembros([...membros, novoMembro]);
+      return Alert.alert("Erro", "Digite um nome para o grupo.");
     }
 
-    setNovoMembro("");
-  }
+    try {
+      const ip = await AsyncStorage.getItem("ipServidor");
+      const usuarioId = await AsyncStorage.getItem("usuarioId");
+      if (!ip) throw new Error("IP do servidor não configurado.");
+      if (!usuarioId) throw new Error("Usuário não autenticado.");
 
-  function editarMembro(index: number) {
-    setModoEdicao(index);
-    setNovoMembro(membros[index]);
-  }
+      const response = await fetch(`${ip}/grupo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: nomeGrupo,
+          descricao: descricaoGrupo,
+          chaveusuario: Number(usuarioId),
+        }),
+      });
 
-  function removerMembro(index: number) {
-    Alert.alert("Remover", "Deseja remover este membro?", [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Remover",
-        style: "destructive",
-        onPress: () => {
-          const membrosAtualizados = membros.filter((_, i) => i !== index);
-          setMembros(membrosAtualizados);
-        },
-      },
-    ]);
+      if (!response.ok) {
+        const texto = await response.text();
+        throw new Error(`Erro ao criar grupo: ${texto}`);
+      }
+
+      setNomeGrupo("");
+      setDescricaoGrupo("");
+      await listarGrupos();
+      Alert.alert("✅ Sucesso", "Grupo criado com sucesso!");
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert("Erro", error.message);
+    }
   }
 
   return (
     <View style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
-      {!grupoCriado ? (
-        <>
-          <Text style={[styles.title, { color: tema.textColor }]}>Criar Grupo</Text>
-          <TextInput
-            placeholder="Nome do grupo"
-            placeholderTextColor={tema.itemColor}
-            value={nomeGrupo}
-            onChangeText={setNomeGrupo}
-            style={[styles.input, { 
-              borderColor: tema.inputBorderColor, 
-              backgroundColor: tema.inputBackground, 
-              color: tema.textColor 
-            }]}
-          />
-          <TouchableOpacity style={[styles.button, { backgroundColor: tema.linkColor }]} onPress={criarGrupo}>
-            <Text style={styles.buttonText}>Criar grupo</Text>
-          </TouchableOpacity>
-        </>
-      ) : (
-        <>
-          <Text style={[styles.title, { color: tema.textColor }]}>Grupo: {nomeGrupo}</Text>
+      <Text style={[styles.title, { color: tema.textColor }]}>Criar Novo Grupo</Text>
 
-          <Text style={[styles.subtitle, { color: tema.textColor }]}>Membros</Text>
-          <FlatList
-            data={membros}
-            keyExtractor={(_, index) => index.toString()}
-            renderItem={({ item, index }) => (
-              <View style={[styles.memberItem, { borderBottomColor: tema.inputBorderColor }]}>
-                <Text style={[styles.memberName, { color: tema.textColor }]}>{item}</Text>
-                <View style={styles.actions}>
-                  <TouchableOpacity onPress={() => editarMembro(index)}>
-                    <Text style={[styles.edit, { color: tema.itemColor }]}>✏️</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => removerMembro(index)}>
-                    <Text style={styles.remove}>❌</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-            ListEmptyComponent={
-              <Text style={{ fontStyle: "italic", color: tema.itemColor }}>
-                Nenhum membro ainda.
-              </Text>
-            }
-            style={{ marginBottom: 20 }}
-          />
+      <TextInput
+        placeholder="Nome do grupo"
+        placeholderTextColor={tema.itemColor}
+        value={nomeGrupo}
+        onChangeText={setNomeGrupo}
+        style={[styles.input, {
+          borderColor: tema.inputBorderColor,
+          backgroundColor: tema.inputBackground,
+          color: tema.textColor
+        }]}
+      />
+      <TextInput
+        placeholder="Descrição (opcional)"
+        placeholderTextColor={tema.itemColor}
+        value={descricaoGrupo}
+        onChangeText={setDescricaoGrupo}
+        style={[styles.input, {
+          borderColor: tema.inputBorderColor,
+          backgroundColor: tema.inputBackground,
+          color: tema.textColor
+        }]}
+      />
+      <TouchableOpacity
+        style={[styles.button, { backgroundColor: tema.linkColor }]}
+        onPress={criarGrupo}
+      >
+        <Text style={styles.buttonText}>Salvar Grupo</Text>
+      </TouchableOpacity>
 
-          <TextInput
-            placeholder="Nome do membro"
-            placeholderTextColor={tema.itemColor}
-            value={novoMembro}
-            onChangeText={setNovoMembro}
-            style={[styles.input, { 
-              borderColor: tema.inputBorderColor, 
-              backgroundColor: tema.inputBackground, 
-              color: tema.textColor 
-            }]}
-          />
-          <TouchableOpacity style={[styles.button, { backgroundColor: tema.linkColor }]} onPress={adicionarMembro}>
-            <Text style={styles.buttonText}>
-              {modoEdicao !== null ? "Salvar edição" : "Adicionar membro"}
+      <Text style={[styles.subtitle, { color: tema.textColor }]}>Grupos Criados</Text>
+      <FlatList
+        data={grupos}
+        keyExtractor={(item) => item.chave.toString()}
+        renderItem={({ item }) => (
+          <View style={[styles.groupItem, { borderBottomColor: tema.inputBorderColor }]}>
+            <Text style={[styles.groupName, { color: tema.textColor }]}>{item.nome}</Text>
+            <Text style={{ color: tema.itemColor, fontSize: 13 }}>{item.descricao}</Text>
+            <Text style={{ color: tema.itemColor, fontSize: 11, marginTop: 4 }}>
+              Criado em: {new Date(item.criado_em).toLocaleString()}
             </Text>
-          </TouchableOpacity>
-        </>
-      )}
+          </View>
+        )}
+        ListEmptyComponent={
+          <Text style={{ color: tema.itemColor, fontStyle: "italic" }}>
+            Nenhum grupo ainda.
+          </Text>
+        }
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "bold",
-    marginBottom: 16,
-  },
-  subtitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 12,
-  },
+  container: { flex: 1, padding: 20 },
+  title: { fontSize: 22, fontWeight: "bold", marginBottom: 16 },
+  subtitle: { fontSize: 18, fontWeight: "600", marginVertical: 16 },
   input: {
     borderWidth: 1,
     borderRadius: 8,
@@ -160,32 +152,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  memberItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 8,
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  groupItem: {
+    paddingVertical: 10,
     borderBottomWidth: 1,
+    marginBottom: 10,
   },
-  memberName: {
-    fontSize: 16,
-    flex: 1,
-  },
-  actions: {
-    flexDirection: "row",
-    gap: 10,
-    marginLeft: 12,
-  },
-  edit: {
-    fontSize: 18,
-    marginRight: 12,
-  },
-  remove: {
-    fontSize: 18,
-    color: "#c62828",
-  },
+  groupName: { fontSize: 16, fontWeight: "600" },
 });

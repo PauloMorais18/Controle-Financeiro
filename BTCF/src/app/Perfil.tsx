@@ -1,6 +1,7 @@
-// Perfil.tsx
 import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from "react-native";
-import { useTheme } from "./ThemeContext"; // Importa o hook useTheme
+import { useTheme } from "./ThemeContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
 
 export const screenOptions = {
   headerShown: true,
@@ -8,14 +9,36 @@ export const screenOptions = {
 };
 
 export default function Perfil() {
-  const { tema } = useTheme(); // Acessa o tema atual
+  const { tema } = useTheme();
+  const router = useRouter();
 
   function handleEditarPerfil() {
     Alert.alert("Editar Perfil", "Função de edição de perfil em desenvolvimento.");
   }
 
-  function handleLogout() {
-    Alert.alert("Sair", "Você saiu da sua conta.");
+  async function handleLogout() {
+    Alert.alert("Sair da Conta", "Você realmente deseja sair?", [
+      {
+        text: "Cancelar",
+        style: "cancel",
+      },
+      {
+        text: "Sair",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await AsyncStorage.removeItem("usuarioEmail");
+            await AsyncStorage.removeItem("usuarioSenha");
+            await AsyncStorage.removeItem("usuarioNome");
+            await AsyncStorage.removeItem("usuarioId");
+            router.replace("/"); // Volta para o login
+          } catch (error) {
+            console.error("Erro ao sair:", error);
+            Alert.alert("Erro", "Não foi possível sair da conta.");
+          }
+        },
+      },
+    ]);
   }
 
   return (
@@ -38,7 +61,6 @@ export default function Perfil() {
   );
 }
 
-// Estilos
 const styles = StyleSheet.create({
   container: {
     flex: 1,
