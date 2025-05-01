@@ -6,29 +6,36 @@ import {
   TouchableOpacity,
   Alert,
   Dimensions,
-  Animated,
+  Modal,
+  Pressable,
   FlatList,
 } from "react-native";
-import { PieChart } from "react-native-chart-kit";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useTheme } from "./ThemeContext";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const screenWidth = Dimensions.get("window").width;
 
 export default function Principal() {
   const router = useRouter();
   const { tema, temaEscuro } = useTheme();
-  const [showActions, setShowActions] = useState(false);
-  const [showValue, setShowValue] = useState(false);
-  const [grupos, setGrupos] = useState([]);
-  const [grupoSelecionado, setGrupoSelecionado] = useState(null);
-  const [dataAtual, setDataAtual] = useState(new Date().toISOString().split("T")[0]);
-  const [saldo, setSaldo] = useState(0);
+
+  const [grupos, setGrupos] = useState<any[]>([]);
+  const [grupoSelecionado, setGrupoSelecionado] = useState<any>(null);
+  const [dataAtual, setDataAtual] = useState(new Date());
+  const [modalGrupoVisivel, setModalGrupoVisivel] = useState(false);
+  const [modalDataVisivel, setModalDataVisivel] = useState(false);
+  const [totais, setTotais] = useState({ entradas: 0, saidas: 0 });
 
   useEffect(() => {
     carregarGrupos();
   }, []);
+
+  useEffect(() => {
+    if (grupoSelecionado) {
+      carregarTotais();
+    }
+  }, [grupoSelecionado, dataAtual]);
 
   async function carregarGrupos() {
     try {
@@ -44,191 +51,194 @@ export default function Principal() {
       if (!gruposRes.ok) throw new Error("Erro ao buscar grupos.");
       const gruposData = await gruposRes.json();
       setGrupos(gruposData);
-      if (gruposData.length > 0) setGrupoSelecionado(gruposData[0].chave);
-    } catch (error) {
-      Alert.alert("Erro ao carregar grupos", error.message);
+      if (gruposData.length > 0) setGrupoSelecionado(gruposData[0]);
+    } catch (err: any) {
+      Alert.alert("Erro", err.message);
     }
   }
 
-  function mudarData(direcao) {
-    const novaData = new Date(dataAtual);
-    novaData.setMonth(novaData.getMonth() + direcao);
-    setDataAtual(novaData.toISOString().split("T")[0]);
+  async function carregarTotais() {
+    try {
+      const ip = await AsyncStorage.getItem("ipServidor");
+      const anoMes = dataAtual.toISOString().slice(0, 7); // yyyy-mm
+
+      const res = await fetch(`${ip}/grafico/gastos/${grupoSelecionado.chave}/${anoMes}`);
+      if (!res.ok) throw new Error("Erro ao buscar totais.");
+      const data = await res.json();
+
+      let entradas = 0, saidas = 0;
+      data.forEach((item: any) => {
+        if (item.tipo === "entrada") entradas += Number(item.total);
+        else if (item.tipo === "saida") saidas += Number(item.total);
+      });
+      setTotais({ entradas, saidas });
+    } catch (err: any) {
+      Alert.alert("Erro ao carregar totais", err.message);
+    }
   }
 
-  const chartData = [
-    { name: "Alimentação", population: 33.3, color: "#4caf50", legendFontColor: tema.textColor, legendFontSize: 12 },
-    { name: "Educação", population: 26.7, color: "#7e57c2", legendFontColor: tema.textColor, legendFontSize: 12 },
-    { name: "Lazer", population: 20.0, color: "#29b6f6", legendFontColor: tema.textColor, legendFontSize: 12 },
-    { name: "Transporte", population: 13.3, color: "#039be5", legendFontColor: tema.textColor, legendFontSize: 12 },
-    { name: "Moradia", population: 6.7, color: "#f44336", legendFontColor: tema.textColor, legendFontSize: 12 },
-  ];
+  function mudarMes(direcao: number) {
+    const nova = new Date(dataAtual);
+    nova.setMonth(nova.getMonth() + direcao);
+    setDataAtual(nova);
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
-      {/* Cabeçalho */}
-      <View style={[styles.header, { backgroundColor: temaEscuro ? "#222222" : tema.linkColor }]}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => router.push("/Perfil")}>
-            <Text style={[styles.menu, { color: "#FFFFFF" }]}>👤</Text>
-          </TouchableOpacity>
-          <Text style={[styles.title, { color: "#FFFFFF" }]}>Painel Financeiro</Text>
-        </View>
-        <TouchableOpacity onPress={() => setShowValue(!showValue)}>
-          <View style={styles.logo}>
-            <Text style={[styles.logoIcon, { color: "#FFFFFF" }]}>💲</Text>
-            <Text style={[styles.logoText, { color: "#FFFFFF" }]}>
-              {showValue ? `R$ ${saldo.toFixed(2)}` : "XXXXXX"}
-            </Text>
-          </View>
+
+      {/* Header com filtro de grupo e data */}
+      <View style={styles.filtroContainer}>
+        <TouchableOpacity onPress={() => setModalGrupoVisivel(true)} style={styles.filtroBotao}>
+          <Text style={{ color: tema.textColor }}>👥 {grupoSelecionado?.nome || "Grupo"}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => setModalDataVisivel(true)} style={styles.filtroBotao}>
+          <Text style={{ color: tema.textColor }}>📅 {dataAtual.toISOString().slice(0, 7)}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Filtros */}
-      <View style={{ flexDirection: "row", justifyContent: "space-between", margin: 16 }}>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <TouchableOpacity onPress={() => mudarData(-1)}>
-            <Text style={{ fontSize: 18, color: tema.textColor }}>◀️</Text>
-          </TouchableOpacity>
-          <Text style={{ marginHorizontal: 10, color: tema.textColor }}>{dataAtual.slice(0, 7)}</Text>
-          <TouchableOpacity onPress={() => mudarData(1)}>
-            <Text style={{ fontSize: 18, color: tema.textColor }}>▶️</Text>
-          </TouchableOpacity>
+      {/* Totais em destaque */}
+      <View style={styles.cardTotais}>
+        <Text style={[styles.valorTotal, { color: tema.textColor }]}>Saldo</Text>
+        <Text style={[styles.valorSaldo, { color: tema.textColor }]}>R$ {(totais.entradas - totais.saidas).toFixed(2)}</Text>
+        <View style={styles.totaisBox}>
+          <Text style={{ color: "green" }}>+ R$ {totais.entradas.toFixed(2)}</Text>
+          <Text style={{ color: "red" }}>- R$ {totais.saidas.toFixed(2)}</Text>
         </View>
-
-        <FlatList
-          horizontal
-          data={grupos}
-          keyExtractor={(item) => item.chave.toString()}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              onPress={() => setGrupoSelecionado(item.chave)}
-              style={{
-                backgroundColor: grupoSelecionado === item.chave ? tema.linkColor : tema.inputBackground,
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                borderRadius: 12,
-                marginLeft: 8,
-              }}
-            >
-              <Text style={{ color: tema.textColor }}>{item.nome}</Text>
-            </TouchableOpacity>
-          )}
-        />
       </View>
 
-      {/* Gráfico */}
-      <PieChart
-        data={chartData}
-        width={screenWidth * 0.95}
-        height={220}
-        chartConfig={{
-          color: () => tema.textColor,
-          labelColor: () => tema.textColor,
-        }}
-        accessor={"population"}
-        backgroundColor={"transparent"}
-        paddingLeft={"20"}
-        center={[5, 0]}
-        absolute
-      />
-
       {/* Botões de ação */}
-      {showActions && (
-        <Animated.View style={[styles.actionButtons, { opacity: 1, transform: [{ translateY: -10 }] }]}>
-          <TouchableOpacity
-            style={[styles.subButton, { backgroundColor: tema.linkColor, marginRight: 10 }]}
-            onPress={() => Alert.alert("Entrada", "Adicionar entrada")}
-          >
-            <Text style={[styles.subText, { color: tema.inputBackground }]}>➕ Entrada</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.subButton, { backgroundColor: tema.linkColor }]}
-            onPress={() => Alert.alert("Saída", "Adicionar saída")}
-          >
-            <Text style={[styles.subText, { color: tema.inputBackground }]}>➖ Saída</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
+      <View style={styles.botoesContainer}>
+        <TouchableOpacity
+          style={[styles.botaoAcao, { backgroundColor: tema.linkColor }]}
+          onPress={() => router.push("/MovimentacaoEntrada")}
+        >
+          <Text style={styles.botaoTexto}>➕ Entrada</Text>
+        </TouchableOpacity>
 
-      {/* Botão principal */}
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: temaEscuro ? "#fff" : tema.linkColor }]}
-        onPress={() => setShowActions((prev) => !prev)}
-      >
-        <Text style={[styles.fabText, { color: "#111" }]}>+</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.botaoAcao, { backgroundColor: tema.linkColor }]}
+          onPress={() => router.push("/MovimentacaoSaida")}
+        >
+          <Text style={styles.botaoTexto}>➖ Saída</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Modal de seleção de grupo */}
+      <Modal visible={modalGrupoVisivel} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitulo}>Selecionar Grupo</Text>
+            {grupos.map((grupo) => (
+              <Pressable
+                key={grupo.chave}
+                onPress={() => {
+                  setGrupoSelecionado(grupo);
+                  setModalGrupoVisivel(false);
+                }}
+                style={styles.modalItem}
+              >
+                <Text>{grupo.nome}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de seleção de data */}
+      <Modal visible={modalDataVisivel} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitulo}>Mês de Referência</Text>
+            <View style={styles.dataSelecao}>
+              <TouchableOpacity onPress={() => mudarMes(-1)}>
+                <Text style={{ fontSize: 24 }}>◀️</Text>
+              </TouchableOpacity>
+              <Text style={{ fontSize: 18 }}>{dataAtual.toISOString().slice(0, 7)}</Text>
+              <TouchableOpacity onPress={() => mudarMes(1)}>
+                <Text style={{ fontSize: 24 }}>▶️</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={() => setModalDataVisivel(false)}>
+              <Text style={{ marginTop: 20, color: "blue" }}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
 
-export const drawerLabel = "📊 Dashboard";
-
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
+  container: { flex: 1, padding: 16 },
+  filtroContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  filtroBotao: {
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ccc",
+  },
+  cardTotais: {
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: "#f2f2f2",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  valorTotal: { fontSize: 16 },
+  valorSaldo: { fontSize: 28, fontWeight: "bold" },
+  totaisBox: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "80%",
+    marginTop: 10,
+  },
+  botoesContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginTop: 20,
+  },
+  botaoAcao: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+  },
+  botaoTexto: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalBox: {
+    width: "80%",
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    padding: 20,
+  },
+  modalTitulo: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  modalItem: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderColor: "#ddd",
+  },
+  dataSelecao: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: 20,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  menu: {
-    fontSize: 28,
-    marginRight: 12,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  logo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  logoIcon: {
-    fontSize: 22,
-    marginRight: 6,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  fab: {
-    position: "absolute",
-    bottom: 30,
-    alignSelf: "center",
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 10,
-  },
-  fabText: {
-    fontSize: 32,
-    fontWeight: "bold",
-    marginTop: -5,
-  },
-  actionButtons: {
-    position: "absolute",
-    bottom: 100,
-    flexDirection: "row",
-    alignSelf: "center",
-    alignItems: "center",
-  },
-  subButton: {
     paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 24,
-    marginVertical: 5,
-  },
-  subText: {
-    fontSize: 16,
-    fontWeight: "bold",
   },
 });
