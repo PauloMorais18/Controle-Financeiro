@@ -76,7 +76,7 @@ export default function Login() {
 
       setTimeout(() => {
         Alert.alert("✅ Login feito!", `Bem-vindo(a), ${usuario.nome}`);
-        router.push("/Principal");
+        router.replace("/Principal");
       }, 300);
     } catch (error: any) {
       console.error(error);
@@ -96,7 +96,7 @@ export default function Login() {
   function handleServidor() {
     animateButton(scaleServidor);
     setTimeout(() => {
-      router.push("/Servidor");
+      router.push("/Servidor"); // Certifique-se de que a tela exista e esteja nomeada corretamente
     }, 200);
   }
 
