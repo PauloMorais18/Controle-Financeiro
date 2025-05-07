@@ -1,0 +1,2 @@
+execute o projeto no BTCG com  >>  npx expo start --tunnel --clear
+isso força a utilização dos servidores da expo para rodar o projeto, pelo npx expo start pode dar erro

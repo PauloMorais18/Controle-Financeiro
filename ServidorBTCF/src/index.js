@@ -109,7 +109,7 @@ app.get('/usuario/por-email/:email', async (req, res) => {
   const { email } = req.params;
   try {
     const result = await pool.query(
-      `SELECT chave FROM "usuario" WHERE email = $1 LIMIT 1`,
+      `SELECT chave, nome, email FROM "usuario" WHERE email = $1 LIMIT 1`,
       [email]
     );
     if (result.rows.length === 0) {
@@ -220,4 +220,5 @@ app.get('/grupo/:grupoId/membros', async (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🟢 Servidor BTCF rodando na porta ${PORT}`);
+  console.log(`    Rode com o comando "http://(ipv4 do cmd >> ipconfig):3000"`);
 });

@@ -59,27 +59,27 @@ export default function Cadastro() {
 
     try {
       setLoading(true);
-      const ipServidor = await AsyncStorage.getItem("ipServidor");
-      if (!ipServidor) throw new Error("IP do servidor não configurado");
+      let ipServidor = await AsyncStorage.getItem("ipServidor");
 
-      const apiUrl = `${ipServidor}/usuario`;
-      const body = { nome, email, senha };
+      // fallback se não houver ip salvo
+      if (!ipServidor) ipServidor = "http://192.168.68.108:3000";
 
-      const response = await fetch(apiUrl, {
+      const response = await fetch(`${ipServidor}/usuario`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ nome, email, senha }),
       });
 
       if (!response.ok) {
-        throw new Error("Erro ao cadastrar usuário");
+        const erro = await response.json();
+        throw new Error(erro.erro || "Erro ao cadastrar usuário.");
       }
 
       Alert.alert("✅ Sucesso", `Usuário ${nome} cadastrado com sucesso!`);
       router.replace("/");
     } catch (error: any) {
-      console.error(error);
-      Alert.alert("Erro", error.message);
+      console.error("Erro no cadastro:", error);
+      Alert.alert("Erro", error.message || "Erro desconhecido");
     } finally {
       setLoading(false);
     }
@@ -91,12 +91,7 @@ export default function Cadastro() {
     <View style={styles.container}>
       <Text style={styles.title}>Cadastro</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Nome"
-        value={nome}
-        onChangeText={setNome}
-      />
+      <TextInput style={styles.input} placeholder="Nome" value={nome} onChangeText={setNome} />
 
       <TextInput
         style={styles.input}
@@ -106,16 +101,11 @@ export default function Cadastro() {
         value={email}
         onChangeText={(text) => {
           setEmail(text);
-          if (text.length > 0) {
-            setEmailInvalido(!validarEmail(text));
-          } else {
-            setEmailInvalido(false);
-          }
+          if (text.length > 0) setEmailInvalido(!validarEmail(text));
+          else setEmailInvalido(false);
         }}
       />
-      {emailInvalido && (
-        <Text style={styles.erroTexto}>E-mail inválido</Text>
-      )}
+      {emailInvalido && <Text style={styles.erroTexto}>E-mail inválido</Text>}
 
       <View style={styles.senhaContainer}>
         <TextInput

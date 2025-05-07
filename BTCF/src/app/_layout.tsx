@@ -1,24 +1,55 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Drawer } from "expo-router/drawer";
 import {
   DrawerContentScrollView,
   DrawerItem,
   DrawerContentComponentProps,
 } from "@react-navigation/drawer";
-import { Text, View } from "react-native";
+import { Text, View, ActivityIndicator } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Slot, usePathname } from "expo-router";
 import { ThemeProvider, useTheme } from "./ThemeContext";
 
 export default function Layout() {
   return (
     <ThemeProvider>
-      <DrawerWithTheme />
+      <AuthGate />
     </ThemeProvider>
   );
 }
 
-// Componente separado para usar o useTheme dentro do Drawer
+function AuthGate() {
+  const [carregando, setCarregando] = useState(true);
+  const [autenticado, setAutenticado] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem("usuarioEmail").then((email) => {
+      setAutenticado(!!email);
+      setCarregando(false);
+    });
+  }, []);
+
+  if (carregando) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  return autenticado ? <DrawerWithTheme /> : <Slot />;
+}
+
 function DrawerWithTheme() {
-  const { tema, temaEscuro } = useTheme(); // Acessa o tema atual
+  const { tema, temaEscuro } = useTheme();
+  const pathname = usePathname();
+
+  // Verifica se está nas rotas de login ou cadastro
+  const ocultarDrawer = pathname === "/" || pathname === "/Cadastro";
+
+  if (ocultarDrawer) {
+    return <Slot />;
+  }
 
   return (
     <Drawer
@@ -56,19 +87,25 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
   const itemBackgroundColor = tema.backgroundColor;
   const activeBackgroundColor = temaEscuro ? "#555" : "#e0e0e0";
 
+  const handleLogout = async () => {
+    await AsyncStorage.removeItem("usuarioEmail");
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "index" }],
+    });
+  };
+
   return (
     <DrawerContentScrollView
       {...props}
       contentContainerStyle={{ flex: 1, backgroundColor: tema.backgroundColor }}
     >
-      {/* TÍTULO DO MENU */}
       <View style={{ padding: 20, paddingBottom: 0 }}>
         <Text style={{ fontWeight: "bold", fontSize: 16, color: tema.itemColor }}>
           MENU
         </Text>
       </View>
 
-      {/* ITENS DO MENU */}
       <View style={{ marginTop: 10 }}>
         <DrawerItem
           label="👤 Perfil"
@@ -128,11 +165,17 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         />
       </View>
 
-      {/* CONFIGURAÇÕES FIXO NO RODAPÉ */}
       <View style={{ flex: 1, justifyContent: "flex-end", paddingHorizontal: 10 }}>
         <DrawerItem
           label="⚙️ Configurações"
           onPress={() => navigation.navigate("Configuracoes")}
+          labelStyle={{ fontSize: 16, color: tema.textColor }}
+          style={{ backgroundColor: itemBackgroundColor }}
+          activeBackgroundColor={activeBackgroundColor}
+        />
+        <DrawerItem
+          label="🚪 Sair"
+          onPress={handleLogout}
           labelStyle={{ fontSize: 16, color: tema.textColor }}
           style={{ backgroundColor: itemBackgroundColor }}
           activeBackgroundColor={activeBackgroundColor}
