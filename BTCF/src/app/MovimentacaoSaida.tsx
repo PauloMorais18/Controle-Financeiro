@@ -81,6 +81,9 @@ export default function MovimentacaoSaida() {
       const valorParcelaNumerico = valorParcela ? parseFloat(valorParcela) : valorNumerico;
       const dataFimParcelas = tipo === "parcelado" ? dataTermino : data;
 
+      const usuarioId = await AsyncStorage.getItem("usuarioId");
+      if (!usuarioId) throw new Error("Usuário não identificado.");
+
       const body = {
         tipo,
         valor: valorNumerico,
@@ -88,6 +91,7 @@ export default function MovimentacaoSaida() {
         qtdeparc: tipo === "parcelado" ? parseInt(parcelas) : 1,
         valorparc: valorParcelaNumerico,
         datafimparc: dataFimParcelas,
+        chavepessoa: parseInt(usuarioId),
       };
 
       const apiUrl = await getApiUrl();
@@ -114,7 +118,6 @@ export default function MovimentacaoSaida() {
 
       setTransacoes((prev) => [novaTransacao, ...prev]);
 
-      // Resetar os campos
       setValor("");
       setTipo("avista");
       setParcelas("");
@@ -124,9 +127,10 @@ export default function MovimentacaoSaida() {
       setData(new Date().toISOString().slice(0, 10));
 
       Alert.alert("✅ Sucesso", "Saída salva com sucesso!");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      Alert.alert("Erro", `Erro ao salvar saída: ${error.message}`);
+      const mensagem = error instanceof Error ? error.message : "Erro ao salvar saída.";
+      Alert.alert("Erro", `Erro ao salvar saída: ${mensagem}`);
     } finally {
       setLoading(false);
     }

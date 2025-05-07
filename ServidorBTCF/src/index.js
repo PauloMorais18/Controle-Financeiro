@@ -29,6 +29,7 @@ app.get('/testdb', async (req, res) => {
   }
 });
 
+// ================== ENTRADA ==================
 app.get('/entrada', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM "entrada" ORDER BY chave DESC');
@@ -39,19 +40,29 @@ app.get('/entrada', async (req, res) => {
 });
 
 app.post('/entrada', async (req, res) => {
-  const { tipo, valor, descricao, qtdeparc, valorparc, datafimparc } = req.body;
+  const { tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa } = req.body;
+
+  if (typeof chavepessoa !== 'number' || isNaN(chavepessoa)) {
+    return res.status(400).json({ erro: "Campo 'chavepessoa' deve ser um número válido." });
+  }
+
   try {
+    console.log("Recebendo entrada:", { tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa });
+
     const result = await pool.query(
-      `INSERT INTO "entrada" (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc)
-       VALUES ($1, $2, $3, NOW(), $4, $5, $6) RETURNING *`,
-      [tipo, valor, descricao, qtdeparc, valorparc, datafimparc]
+      `INSERT INTO "entrada" (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa)
+       VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7) RETURNING *`,
+      [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa]
     );
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ erro: err.message });
+    console.error("Erro ao inserir entrada:", err);
+    res.status(500).json({ erro: "Erro ao inserir a entrada", detalhes: err.message });
   }
 });
 
+// ================== SAIDA ==================
 app.get('/saida', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM "saida" ORDER BY chave DESC');
@@ -62,19 +73,29 @@ app.get('/saida', async (req, res) => {
 });
 
 app.post('/saida', async (req, res) => {
-  const { tipo, valor, descricao, qtdeparc, valorparc, datafimparc } = req.body;
+  const { tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa } = req.body;
+
+  if (typeof chavepessoa !== 'number' || isNaN(chavepessoa)) {
+    return res.status(400).json({ erro: "Campo 'chavepessoa' deve ser um número válido." });
+  }
+
   try {
+    console.log("Recebendo saída:", { tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa });
+
     const result = await pool.query(
-      `INSERT INTO "saida" (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc)
-       VALUES ($1, $2, $3, NOW(), $4, $5, $6) RETURNING *`,
-      [tipo, valor, descricao, qtdeparc, valorparc, datafimparc]
+      `INSERT INTO "saida" (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa)
+       VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7) RETURNING *`,
+      [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa]
     );
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ erro: err.message });
+    console.error("Erro ao inserir saída:", err);
+    res.status(500).json({ erro: "Erro ao inserir a saída", detalhes: err.message });
   }
 });
 
+// ================== USUÁRIO ==================
 app.post('/usuario', async (req, res) => {
   const { nome, email, senha } = req.body;
   try {
@@ -121,6 +142,7 @@ app.get('/usuario/por-email/:email', async (req, res) => {
   }
 });
 
+// ================== GRUPO ==================
 app.get('/grupo', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM "grupo" ORDER BY chave DESC');
@@ -218,7 +240,8 @@ app.get('/grupo/:grupoId/membros', async (req, res) => {
   }
 });
 
+// ================== INICIAR ==================
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🟢 Servidor BTCF rodando na porta ${PORT}`);
-  console.log(`    Rode com o comando "http://(ipv4 do cmd >> ipconfig):3000"`);
+  console.log(`    Acesse via: http://localhost:${PORT}`);
 });
