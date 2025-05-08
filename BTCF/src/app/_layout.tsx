@@ -73,7 +73,6 @@ function DrawerWithTheme() {
       <Drawer.Screen name="GerenciarGrupo" options={{ title: "Gerenciar Grupos" }} />
       <Drawer.Screen name="MovimentacaoEntrada" options={{ title: "Entrada" }} />
       <Drawer.Screen name="MovimentacaoSaida" options={{ title: "Saída" }} />
-      <Drawer.Screen name="Analise" options={{ title: "Análise" }} />
       <Drawer.Screen name="RelatorioFinanceiro" options={{ title: "Relatório" }} />
       <Drawer.Screen name="Configuracoes" options={{ title: "Configurações" }} />
     </Drawer>
@@ -145,13 +144,6 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         <DrawerItem
           label="➖ Saída"
           onPress={() => navigation.navigate("MovimentacaoSaida")}
-          labelStyle={{ color: tema.textColor }}
-          style={{ backgroundColor: itemBackgroundColor }}
-          activeBackgroundColor={activeBackgroundColor}
-        />
-        <DrawerItem
-          label="📊 Análise"
-          onPress={() => navigation.navigate("Analise")}
           labelStyle={{ color: tema.textColor }}
           style={{ backgroundColor: itemBackgroundColor }}
           activeBackgroundColor={activeBackgroundColor}

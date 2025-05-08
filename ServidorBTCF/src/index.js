@@ -29,7 +29,32 @@ app.get('/testdb', async (req, res) => {
   }
 });
 
-// ================== ENTRADA ==================
+// ============ NOVO ENDPOINT ============
+// Totais por tipo (entrada/saida) por grupo e mês
+app.get('/grafico/gastos/:grupoId/:anoMes', async (req, res) => {
+  const { grupoId, anoMes } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT tipo, SUM(valor) AS total
+       FROM (
+         SELECT 'entrada' AS tipo, valor, datacad, chavepessoa FROM entrada
+         UNION ALL
+         SELECT 'saida' AS tipo, valor, datacad, chavepessoa FROM saida
+       ) AS transacoes
+       WHERE to_char(datacad, 'YYYY-MM') = $1
+         AND chavepessoa IN (
+           SELECT chaveusuario FROM pessoasgrupo WHERE chavegrupo = $2
+         )
+       GROUP BY tipo`,
+      [anoMes, grupoId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao buscar totais', detalhes: err.message });
+  }
+});
+
+// ============ ENTRADA ============
 app.get('/entrada', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM "entrada" ORDER BY chave DESC');
@@ -41,28 +66,23 @@ app.get('/entrada', async (req, res) => {
 
 app.post('/entrada', async (req, res) => {
   const { tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa } = req.body;
-
   if (typeof chavepessoa !== 'number' || isNaN(chavepessoa)) {
     return res.status(400).json({ erro: "Campo 'chavepessoa' deve ser um número válido." });
   }
 
   try {
-    console.log("Recebendo entrada:", { tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa });
-
     const result = await pool.query(
       `INSERT INTO "entrada" (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa)
        VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7) RETURNING *`,
       [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa]
     );
-
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("Erro ao inserir entrada:", err);
     res.status(500).json({ erro: "Erro ao inserir a entrada", detalhes: err.message });
   }
 });
 
-// ================== SAIDA ==================
+// ============ SAIDA ============
 app.get('/saida', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM "saida" ORDER BY chave DESC');
@@ -74,28 +94,23 @@ app.get('/saida', async (req, res) => {
 
 app.post('/saida', async (req, res) => {
   const { tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa } = req.body;
-
   if (typeof chavepessoa !== 'number' || isNaN(chavepessoa)) {
     return res.status(400).json({ erro: "Campo 'chavepessoa' deve ser um número válido." });
   }
 
   try {
-    console.log("Recebendo saída:", { tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa });
-
     const result = await pool.query(
       `INSERT INTO "saida" (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa)
        VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7) RETURNING *`,
       [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa]
     );
-
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("Erro ao inserir saída:", err);
     res.status(500).json({ erro: "Erro ao inserir a saída", detalhes: err.message });
   }
 });
 
-// ================== USUÁRIO ==================
+// ============ USUÁRIO ============
 app.post('/usuario', async (req, res) => {
   const { nome, email, senha } = req.body;
   try {
@@ -142,7 +157,7 @@ app.get('/usuario/por-email/:email', async (req, res) => {
   }
 });
 
-// ================== GRUPO ==================
+// ============ GRUPO ============
 app.get('/grupo', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM "grupo" ORDER BY chave DESC');
@@ -175,15 +190,12 @@ app.post('/grupo', async (req, res) => {
        VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING *`,
       [nome, descricao]
     );
-
     const grupoCriado = grupoResult.rows[0];
-
     await pool.query(
       `INSERT INTO "pessoasgrupo" (chaveusuario, chavegrupo, lider)
        VALUES ($1, $2, true)`,
       [chaveusuario, grupoCriado.chave]
     );
-
     res.status(201).json(grupoCriado);
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -197,13 +209,11 @@ app.post('/grupo/adicionar-pessoa', async (req, res) => {
       `SELECT chave FROM "usuario" WHERE email = $1 LIMIT 1`,
       [email]
     );
-
     if (usuarioResult.rows.length === 0) {
       return res.status(404).json({ erro: "Usuário não encontrado" });
     }
 
     const chaveusuario = usuarioResult.rows[0].chave;
-
     const jaExiste = await pool.query(
       `SELECT * FROM "pessoasgrupo" WHERE chaveusuario = $1 AND chavegrupo = $2`,
       [chaveusuario, chavegrupo]
@@ -240,7 +250,8 @@ app.get('/grupo/:grupoId/membros', async (req, res) => {
   }
 });
 
-// ================== INICIAR ==================
+// ============ INICIAR ============
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🟢 Servidor BTCF rodando na porta ${PORT}`);
   console.log(`    Acesse via: http://localhost:${PORT}`);
