@@ -1,5 +1,4 @@
-// Arquivo: Principal.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,7 +11,7 @@ import {
   Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { useTheme } from "./ThemeContext";
 import { PieChart } from "react-native-chart-kit";
 
@@ -20,8 +19,7 @@ const screenWidth = Dimensions.get("window").width;
 
 export default function Principal() {
   const router = useRouter();
-  const themeContext = useTheme();
-  const tema = themeContext?.tema || {
+  const tema = useTheme()?.tema || {
     backgroundColor: "#fff",
     textColor: "#000",
     itemColor: "#333",
@@ -35,12 +33,17 @@ export default function Principal() {
   const [grupoSelecionado, setGrupoSelecionado] = useState<any>(null);
   const [totais, setTotais] = useState({ entradas: 0, saidas: 0 });
 
-  useEffect(() => {
-    carregarGrupos();
-  }, []);
+  // ✅ Atualiza os grupos toda vez que a tela ganha foco
+  useFocusEffect(
+    useCallback(() => {
+      carregarGruposESelecionar();
+    }, [])
+  );
 
   useEffect(() => {
-    if (grupoSelecionado) carregarTotais();
+    if (grupoSelecionado) {
+      carregarTotais();
+    }
   }, [grupoSelecionado, dataAtual]);
 
   useEffect(() => {
@@ -60,10 +63,12 @@ export default function Principal() {
     setDataAtual(nova);
   }
 
-  async function carregarGrupos() {
+  async function carregarGruposESelecionar() {
     try {
-      const email = await AsyncStorage.getItem("usuarioEmail");
-      const ip = await AsyncStorage.getItem("ipServidor");
+      const [email, ip] = await Promise.all([
+        AsyncStorage.getItem("usuarioEmail"),
+        AsyncStorage.getItem("ipServidor"),
+      ]);
       if (!email || !ip) throw new Error("Dados de autenticação ausentes.");
 
       const usuarioRes = await fetch(`${ip}/usuario/por-email/${email}`);
@@ -75,8 +80,8 @@ export default function Principal() {
       const gruposData = await gruposRes.json();
 
       setGrupos(gruposData);
-      const grupoSalvo = gruposData.find((g: any) => g.chave === grupoSelecionado?.chave);
-      setGrupoSelecionado(grupoSalvo || gruposData[0]);
+      const grupoAtual = gruposData.find((g: any) => g.chave === grupoSelecionado?.chave);
+      setGrupoSelecionado(grupoAtual || gruposData[0] || null);
     } catch (err: any) {
       Alert.alert("Erro", err.message);
     }
@@ -85,11 +90,10 @@ export default function Principal() {
   async function carregarTotais() {
     try {
       const ip = await AsyncStorage.getItem("ipServidor");
-      const anoMes = dataAtual.toISOString().slice(0, 7);
-      const grupoId = grupoSelecionado?.chave;
-      if (!ip || !grupoId) return;
+      if (!ip || !grupoSelecionado?.chave) return;
 
-      const res = await fetch(`${ip}/grafico/gastos/${grupoId}/${anoMes}`);
+      const anoMes = dataAtual.toISOString().slice(0, 7);
+      const res = await fetch(`${ip}/grafico/gastos/${grupoSelecionado.chave}/${anoMes}`);
       if (!res.ok) throw new Error("Erro ao buscar totais.");
       const data = await res.json();
 
@@ -110,23 +114,29 @@ export default function Principal() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
-      {/* Cabeçalho e Filtros */}
+      {/* Filtros */}
       <View style={styles.filtrosRow}>
         <TouchableOpacity onPress={() => setModalGrupoVisivel(true)} style={styles.filtroBotao}>
-          <Text style={[styles.filtroTexto, { color: tema.textColor }]}>👥 {grupoSelecionado?.nome || "Grupo"}</Text>
+          <Text style={[styles.filtroTexto, { color: tema.textColor }]}>
+            👥 {grupoSelecionado?.nome || "Grupo"}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => setModalDataVisivel(true)} style={styles.filtroBotao}>
-          <Text style={[styles.filtroTexto, { color: tema.textColor }]}>📅 {formatarMes(dataAtual)}</Text>
+          <Text style={[styles.filtroTexto, { color: tema.textColor }]}>
+            📅 {formatarMes(dataAtual)}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={carregarTotais} style={[styles.filtroBotao, { backgroundColor: "#e0e0e0" }]}>
           <Text style={[styles.filtroTexto, { color: tema.textColor }]}>🔄 Atualizar</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Saldo */}
+      {/* Totais */}
       <View style={styles.cardTotais}>
         <Text style={[styles.valorTotal, { color: tema.textColor }]}>Saldo Total</Text>
-        <Text style={[styles.valorSaldo, { color: tema.textColor }]}>R$ {saldo.toFixed(2)} ({status})</Text>
+        <Text style={[styles.valorSaldo, { color: tema.textColor }]}>
+          R$ {saldo.toFixed(2)} ({status})
+        </Text>
         <View style={styles.totaisBox}>
           <Text style={{ color: "green" }}>Entradas: R$ {totais.entradas.toFixed(2)}</Text>
           <Text style={{ color: "red" }}>Saídas: R$ {totais.saidas.toFixed(2)}</Text>
@@ -137,33 +147,19 @@ export default function Principal() {
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>Resumo Gráfico</Text>
       <PieChart
         data={[
-          {
-            name: "Entradas",
-            population: totais.entradas,
-            color: "green",
-            legendFontColor: "#000",
-            legendFontSize: 14,
-          },
-          {
-            name: "Saídas",
-            population: totais.saidas,
-            color: "red",
-            legendFontColor: "#000",
-            legendFontSize: 14,
-          },
+          { name: "Entradas", population: totais.entradas, color: "green", legendFontColor: "#000", legendFontSize: 14 },
+          { name: "Saídas", population: totais.saidas, color: "red", legendFontColor: "#000", legendFontSize: 14 },
         ]}
         width={screenWidth - 32}
         height={220}
-        chartConfig={{
-          color: () => "#000",
-        }}
+        chartConfig={{ color: () => "#000" }}
         accessor="population"
         backgroundColor="transparent"
         paddingLeft="15"
         absolute
       />
 
-      {/* Botões de Ação */}
+      {/* Ações */}
       <View style={styles.botoesContainer}>
         <TouchableOpacity style={[styles.botaoAcao, { backgroundColor: tema.linkColor }]} onPress={() => router.push("/MovimentacaoEntrada")}>
           <Text style={styles.botaoTexto}>➕ Entrada</Text>
@@ -173,7 +169,7 @@ export default function Principal() {
         </TouchableOpacity>
       </View>
 
-      {/* Modal Grupo */}
+      {/* Modal de Grupo */}
       <Modal visible={modalGrupoVisivel} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={styles.modalBox}>
@@ -184,7 +180,14 @@ export default function Principal() {
               </TouchableOpacity>
             </View>
             {grupos.map((grupo) => (
-              <Pressable key={grupo.chave} onPress={() => { setGrupoSelecionado(grupo); setModalGrupoVisivel(false); }} style={styles.modalItem}>
+              <Pressable
+                key={grupo.chave}
+                onPress={() => {
+                  setGrupoSelecionado(grupo);
+                  setModalGrupoVisivel(false);
+                }}
+                style={styles.modalItem}
+              >
                 <Text>{grupo.nome}</Text>
               </Pressable>
             ))}
@@ -192,7 +195,7 @@ export default function Principal() {
         </View>
       </Modal>
 
-      {/* Modal Data */}
+      {/* Modal de Mês */}
       <Modal visible={modalDataVisivel} transparent animationType="fade">
         <View style={styles.modalContainer}>
           <View style={styles.modalBox}>

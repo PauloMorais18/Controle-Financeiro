@@ -67,8 +67,8 @@ function DrawerWithTheme() {
       }}
       drawerContent={(props) => <CustomDrawerContent {...props} />}
     >
-      <Drawer.Screen name="Perfil" options={{ title: "Perfil" }} />
       <Drawer.Screen name="Principal" options={{ title: "Principal" }} />
+      <Drawer.Screen name="Perfil" options={{ title: "Perfil" }} />
       <Drawer.Screen name="Grupo" options={{ title: "Criar Grupo" }} />
       <Drawer.Screen name="GerenciarGrupo" options={{ title: "Gerenciar Grupos" }} />
       <Drawer.Screen name="MovimentacaoEntrada" options={{ title: "Entrada" }} />

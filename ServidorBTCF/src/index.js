@@ -8,6 +8,7 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
+// ===== RAIZ E TESTE =====
 app.get('/', (req, res) => {
   res.send('Servidor BTCF está rodando!');
 });
@@ -15,22 +16,14 @@ app.get('/', (req, res) => {
 app.get('/testdb', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');
-    res.json({
-      status: 'ok',
-      message: 'Conexão com o banco bem-sucedida!',
-      timestamp: result.rows[0].now,
-    });
+    res.json({ status: 'ok', message: 'Conexão bem-sucedida', timestamp: result.rows[0].now });
   } catch (error) {
-    res.status(500).json({
-      status: 'error',
-      message: 'Erro na conexão com o banco',
-      error: error.message,
-    });
+    console.error(error);
+    res.status(500).json({ status: 'error', message: 'Erro na conexão', error: error.message });
   }
 });
 
-// ============ NOVO ENDPOINT ============
-// Totais por tipo (entrada/saida) por grupo e mês
+// ===== GRÁFICO DE GASTOS (RESUMO ENTRADAS/SAÍDAS) =====
 app.get('/grafico/gastos/:grupoId/:anoMes', async (req, res) => {
   const { grupoId, anoMes } = req.params;
   try {
@@ -50,16 +43,43 @@ app.get('/grafico/gastos/:grupoId/:anoMes', async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ erro: 'Erro ao buscar totais', detalhes: err.message });
   }
 });
 
-// ============ ENTRADA ============
-app.get('/entrada', async (req, res) => {
+// ===== DETALHAMENTO DAS TRANSAÇÕES (opcional para uso futuro) =====
+app.get('/transacoes/:grupoId/:anoMes', async (req, res) => {
+  const { grupoId, anoMes } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM "entrada" ORDER BY chave DESC');
+    const result = await pool.query(
+      `SELECT tipo, valor, descricao, datacad
+       FROM (
+         SELECT 'entrada' AS tipo, valor, descricao, datacad, chavepessoa FROM entrada
+         UNION ALL
+         SELECT 'saida' AS tipo, valor, descricao, datacad, chavepessoa FROM saida
+       ) AS transacoes
+       WHERE to_char(datacad, 'YYYY-MM') = $1
+         AND chavepessoa IN (
+           SELECT chaveusuario FROM pessoasgrupo WHERE chavegrupo = $2
+         )
+       ORDER BY datacad DESC`,
+      [anoMes, grupoId]
+    );
     res.json(result.rows);
   } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar transações', detalhes: err.message });
+  }
+});
+
+// ===== ENTRADAS =====
+app.get('/entrada', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM entrada ORDER BY chave DESC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -69,25 +89,26 @@ app.post('/entrada', async (req, res) => {
   if (typeof chavepessoa !== 'number' || isNaN(chavepessoa)) {
     return res.status(400).json({ erro: "Campo 'chavepessoa' deve ser um número válido." });
   }
-
   try {
     const result = await pool.query(
-      `INSERT INTO "entrada" (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa)
+      `INSERT INTO entrada (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa)
        VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7) RETURNING *`,
       [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ erro: "Erro ao inserir a entrada", detalhes: err.message });
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao inserir entrada", detalhes: err.message });
   }
 });
 
-// ============ SAIDA ============
+// ===== SAÍDAS =====
 app.get('/saida', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM "saida" ORDER BY chave DESC');
+    const result = await pool.query('SELECT * FROM saida ORDER BY chave DESC');
     res.json(result.rows);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -97,30 +118,30 @@ app.post('/saida', async (req, res) => {
   if (typeof chavepessoa !== 'number' || isNaN(chavepessoa)) {
     return res.status(400).json({ erro: "Campo 'chavepessoa' deve ser um número válido." });
   }
-
   try {
     const result = await pool.query(
-      `INSERT INTO "saida" (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa)
+      `INSERT INTO saida (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa)
        VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7) RETURNING *`,
       [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ erro: "Erro ao inserir a saída", detalhes: err.message });
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao inserir saída", detalhes: err.message });
   }
 });
 
-// ============ USUÁRIO ============
+// ===== USUÁRIO =====
 app.post('/usuario', async (req, res) => {
   const { nome, email, senha } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO "usuario" (nome, email, senha)
-       VALUES ($1, $2, $3) RETURNING *`,
+      `INSERT INTO usuario (nome, email, senha) VALUES ($1, $2, $3) RETURNING *`,
       [nome, email, senha]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -128,15 +149,13 @@ app.post('/usuario', async (req, res) => {
 app.post('/usuario/login', async (req, res) => {
   const { email, senha } = req.body;
   try {
-    const result = await pool.query(
-      `SELECT * FROM "usuario" WHERE email = $1 AND senha = $2`,
-      [email, senha]
-    );
+    const result = await pool.query(`SELECT * FROM usuario WHERE email = $1 AND senha = $2`, [email, senha]);
     if (result.rows.length === 0) {
       return res.status(401).json({ erro: "E-mail ou senha inválidos" });
     }
     res.json(result.rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -145,7 +164,7 @@ app.get('/usuario/por-email/:email', async (req, res) => {
   const { email } = req.params;
   try {
     const result = await pool.query(
-      `SELECT chave, nome, email FROM "usuario" WHERE email = $1 LIMIT 1`,
+      `SELECT chave, nome, email FROM usuario WHERE email = $1 LIMIT 1`,
       [email]
     );
     if (result.rows.length === 0) {
@@ -153,16 +172,18 @@ app.get('/usuario/por-email/:email', async (req, res) => {
     }
     res.json(result.rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
 
-// ============ GRUPO ============
+// ===== GRUPO =====
 app.get('/grupo', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM "grupo" ORDER BY chave DESC');
+    const result = await pool.query('SELECT * FROM grupo ORDER BY chave DESC');
     res.json(result.rows);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -171,13 +192,14 @@ app.get('/grupo/usuario/:usuarioId', async (req, res) => {
   const { usuarioId } = req.params;
   try {
     const result = await pool.query(
-      `SELECT g.* FROM "grupo" g
-       JOIN "pessoasgrupo" pg ON g.chave = pg.chavegrupo
+      `SELECT g.* FROM grupo g
+       JOIN pessoasgrupo pg ON g.chave = pg.chavegrupo
        WHERE pg.chaveusuario = $1 ORDER BY g.chave DESC`,
       [usuarioId]
     );
     res.json(result.rows);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -186,18 +208,19 @@ app.post('/grupo', async (req, res) => {
   const { nome, descricao, chaveusuario } = req.body;
   try {
     const grupoResult = await pool.query(
-      `INSERT INTO "grupo" (nome, descricao, criado_em, atualizado_em)
+      `INSERT INTO grupo (nome, descricao, criado_em, atualizado_em)
        VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING *`,
       [nome, descricao]
     );
     const grupoCriado = grupoResult.rows[0];
     await pool.query(
-      `INSERT INTO "pessoasgrupo" (chaveusuario, chavegrupo, lider)
+      `INSERT INTO pessoasgrupo (chaveusuario, chavegrupo, lider)
        VALUES ($1, $2, true)`,
       [chaveusuario, grupoCriado.chave]
     );
     res.status(201).json(grupoCriado);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -206,7 +229,7 @@ app.post('/grupo/adicionar-pessoa', async (req, res) => {
   const { email, chavegrupo } = req.body;
   try {
     const usuarioResult = await pool.query(
-      `SELECT chave FROM "usuario" WHERE email = $1 LIMIT 1`,
+      `SELECT chave FROM usuario WHERE email = $1 LIMIT 1`,
       [email]
     );
     if (usuarioResult.rows.length === 0) {
@@ -215,7 +238,7 @@ app.post('/grupo/adicionar-pessoa', async (req, res) => {
 
     const chaveusuario = usuarioResult.rows[0].chave;
     const jaExiste = await pool.query(
-      `SELECT * FROM "pessoasgrupo" WHERE chaveusuario = $1 AND chavegrupo = $2`,
+      `SELECT 1 FROM pessoasgrupo WHERE chaveusuario = $1 AND chavegrupo = $2`,
       [chaveusuario, chavegrupo]
     );
 
@@ -224,13 +247,14 @@ app.post('/grupo/adicionar-pessoa', async (req, res) => {
     }
 
     await pool.query(
-      `INSERT INTO "pessoasgrupo" (chaveusuario, chavegrupo, lider)
+      `INSERT INTO pessoasgrupo (chaveusuario, chavegrupo, lider)
        VALUES ($1, $2, false)`,
       [chaveusuario, chavegrupo]
     );
 
     res.status(201).json({ mensagem: "Usuário adicionado ao grupo com sucesso!" });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -239,19 +263,19 @@ app.get('/grupo/:grupoId/membros', async (req, res) => {
   const { grupoId } = req.params;
   try {
     const result = await pool.query(
-      `SELECT u.nome, u.email, pg.lider FROM "usuario" u
-       JOIN "pessoasgrupo" pg ON u.chave = pg.chaveusuario
+      `SELECT u.nome, u.email, pg.lider FROM usuario u
+       JOIN pessoasgrupo pg ON u.chave = pg.chaveusuario
        WHERE pg.chavegrupo = $1`,
       [grupoId]
     );
     res.status(200).json(result.rows);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
 
-// ============ INICIAR ============
-
+// ===== INICIAR SERVIDOR =====
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🟢 Servidor BTCF rodando na porta ${PORT}`);
   console.log(`    Acesse via: http://localhost:${PORT}`);
