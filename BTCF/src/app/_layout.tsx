@@ -44,7 +44,6 @@ function DrawerWithTheme() {
   const { tema, temaEscuro } = useTheme();
   const pathname = usePathname();
 
-  // Verifica se está nas rotas de login ou cadastro
   const ocultarDrawer = pathname === "/" || pathname === "/Cadastro";
 
   if (ocultarDrawer) {
@@ -74,6 +73,7 @@ function DrawerWithTheme() {
       <Drawer.Screen name="MovimentacaoEntrada" options={{ title: "Entrada" }} />
       <Drawer.Screen name="MovimentacaoSaida" options={{ title: "Saída" }} />
       <Drawer.Screen name="RelatorioFinanceiro" options={{ title: "Relatório" }} />
+      <Drawer.Screen name="ServidorConfig" options={{ title: "Servidor" }} />
       <Drawer.Screen name="Configuracoes" options={{ title: "Configurações" }} />
     </Drawer>
   );
@@ -151,6 +151,13 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         <DrawerItem
           label="🧾 Relatório"
           onPress={() => navigation.navigate("RelatorioFinanceiro")}
+          labelStyle={{ color: tema.textColor }}
+          style={{ backgroundColor: itemBackgroundColor }}
+          activeBackgroundColor={activeBackgroundColor}
+        />
+        <DrawerItem
+          label="🖥️ Servidor"
+          onPress={() => navigation.navigate("ServidorConfig")}
           labelStyle={{ color: tema.textColor }}
           style={{ backgroundColor: itemBackgroundColor }}
           activeBackgroundColor={activeBackgroundColor}

@@ -23,7 +23,7 @@ app.get('/testdb', async (req, res) => {
   }
 });
 
-// ===== GRÁFICO DE GASTOS (RESUMO ENTRADAS/SAÍDAS) =====
+// ===== GRÁFICO DE GASTOS =====
 app.get('/grafico/gastos/:grupoId/:anoMes', async (req, res) => {
   const { grupoId, anoMes } = req.params;
   try {
@@ -48,7 +48,6 @@ app.get('/grafico/gastos/:grupoId/:anoMes', async (req, res) => {
   }
 });
 
-// ===== DETALHAMENTO DAS TRANSAÇÕES (opcional para uso futuro) =====
 app.get('/transacoes/:grupoId/:anoMes', async (req, res) => {
   const { grupoId, anoMes } = req.params;
   try {
@@ -86,15 +85,33 @@ app.get('/entrada', async (req, res) => {
 
 app.post('/entrada', async (req, res) => {
   const { tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa } = req.body;
+
   if (typeof chavepessoa !== 'number' || isNaN(chavepessoa)) {
     return res.status(400).json({ erro: "Campo 'chavepessoa' deve ser um número válido." });
   }
+
   try {
-    const result = await pool.query(
-      `INSERT INTO entrada (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa)
-       VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7) RETURNING *`,
-      [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa]
+    const grupoRes = await pool.query(
+      `SELECT chavegrupo FROM pessoasgrupo
+       WHERE chaveusuario = $1
+       ORDER BY lider DESC, criado_em ASC
+       LIMIT 1`,
+      [chavepessoa]
     );
+
+    if (grupoRes.rows.length === 0) {
+      return res.status(400).json({ erro: "Usuário não está vinculado a nenhum grupo." });
+    }
+
+    const chavegrupo = grupoRes.rows[0].chavegrupo;
+
+    const result = await pool.query(
+      `INSERT INTO entrada (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo)
+       VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo]
+    );
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -115,15 +132,33 @@ app.get('/saida', async (req, res) => {
 
 app.post('/saida', async (req, res) => {
   const { tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa } = req.body;
+
   if (typeof chavepessoa !== 'number' || isNaN(chavepessoa)) {
     return res.status(400).json({ erro: "Campo 'chavepessoa' deve ser um número válido." });
   }
+
   try {
-    const result = await pool.query(
-      `INSERT INTO saida (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa)
-       VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7) RETURNING *`,
-      [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa]
+    const grupoRes = await pool.query(
+      `SELECT chavegrupo FROM pessoasgrupo
+       WHERE chaveusuario = $1
+       ORDER BY lider DESC, criado_em ASC
+       LIMIT 1`,
+      [chavepessoa]
     );
+
+    if (grupoRes.rows.length === 0) {
+      return res.status(400).json({ erro: "Usuário não está vinculado a nenhum grupo." });
+    }
+
+    const chavegrupo = grupoRes.rows[0].chavegrupo;
+
+    const result = await pool.query(
+      `INSERT INTO saida (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo)
+       VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo]
+    );
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);

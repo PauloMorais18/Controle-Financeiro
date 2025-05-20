@@ -94,9 +94,10 @@ export default function Login() {
   }
 
   function handleServidor() {
+    console.log("Botão de servidor clicado");
     animateButton(scaleServidor);
     setTimeout(() => {
-      router.push("/Servidor"); // Certifique-se de que a tela exista e esteja nomeada corretamente
+      router.push("/ServidorConfig");
     }, 200);
   }
 
