@@ -11,7 +11,7 @@ app.use(express.json());
 // ===== RAIZ E TESTE =====
 app.get('/', (req, res) => {
   res.send('Servidor BTCF está rodando!');
-});
+}); 
 
 app.get('/testdb', async (req, res) => {
   try {
