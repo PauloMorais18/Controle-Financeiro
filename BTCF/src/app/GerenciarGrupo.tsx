@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "./ThemeContext";
+import { useFocusEffect } from "@react-navigation/native";
 
 export default function GerenciarGrupo() {
   const { tema } = useTheme();
@@ -17,10 +18,13 @@ export default function GerenciarGrupo() {
   const [emailParaAdicionar, setEmailParaAdicionar] = useState("");
   const [grupoSelecionado, setGrupoSelecionado] = useState<number | null>(null);
   const [membrosGrupo, setMembrosGrupo] = useState<{ [grupoId: number]: any[] }>({});
+  const [usuarioId, setUsuarioId] = useState<number | null>(null);
 
-  useEffect(() => {
-    carregarGruposDoUsuario();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      carregarGruposDoUsuario();
+    }, [])
+  );
 
   async function carregarGruposDoUsuario() {
     try {
@@ -31,12 +35,21 @@ export default function GerenciarGrupo() {
       const usuarioRes = await fetch(`${ip}/usuario/por-email/${email}`);
       if (!usuarioRes.ok) throw new Error("Usuário não encontrado.");
       const usuarioData = await usuarioRes.json();
-      const chaveUsuario = usuarioData.chave;
+      setUsuarioId(usuarioData.chave);
 
-      const gruposRes = await fetch(`${ip}/grupo/usuario/${chaveUsuario}`);
+      const gruposRes = await fetch(`${ip}/grupo`);
       if (!gruposRes.ok) throw new Error("Erro ao buscar grupos.");
-      const gruposData = await gruposRes.json();
-      setGrupos(gruposData);
+      const todosGrupos = await gruposRes.json();
+
+      const participacaoRes = await fetch(`${ip}/grupo/usuario/${usuarioData.chave}`);
+      const gruposParticipante = participacaoRes.ok ? await participacaoRes.json() : [];
+
+      const idsParticipante = gruposParticipante.map((g: any) => g.chave);
+      const gruposFiltrados = todosGrupos.filter((grupo: any) =>
+        grupo.chaveusuariocriou === usuarioData.chave || idsParticipante.includes(grupo.chave)
+      );
+
+      setGrupos(gruposFiltrados);
     } catch (error: any) {
       console.error(error);
       Alert.alert("Erro", error.message);
@@ -78,21 +91,31 @@ export default function GerenciarGrupo() {
 
       const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.erro || "Erro desconhecido");
-      }
+      if (!res.ok) throw new Error(data.erro || "Erro desconhecido");
 
       Alert.alert("✅ Sucesso", data.mensagem);
       setEmailParaAdicionar("");
-      await buscarMembrosDoGrupo(grupoId); // Atualiza lista de membros
+      await buscarMembrosDoGrupo(grupoId);
     } catch (error: any) {
       Alert.alert("Erro ao adicionar pessoa ao grupo", error.message);
     }
   }
 
+  function obterPapel(grupo: any): "Administrador" | "Participante" {
+    if (grupo.chaveusuariocriou === usuarioId) return "Administrador";
+    return "Participante";
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
       <Text style={[styles.title, { color: tema.textColor }]}>Meus Grupos</Text>
+
+      <TouchableOpacity
+        onPress={carregarGruposDoUsuario}
+        style={[styles.botaoAtualizar, { backgroundColor: tema.linkColor }]}
+      >
+        <Text style={styles.botaoTexto}>🔄 Atualizar</Text>
+      </TouchableOpacity>
 
       <FlatList
         data={grupos}
@@ -103,6 +126,7 @@ export default function GerenciarGrupo() {
             <Text style={[styles.descricao, { color: tema.itemColor }]}>
               {item.descricao || "Sem descrição"}
             </Text>
+            <Text style={[styles.papel, { color: tema.linkColor }]}>Papel: {obterPapel(item)}</Text>
 
             {grupoSelecionado === item.chave ? (
               <>
@@ -124,15 +148,14 @@ export default function GerenciarGrupo() {
                   <Text style={styles.botaoTexto}>Confirmar</Text>
                 </TouchableOpacity>
 
-                {/* Mostrar membros */}
                 {membrosGrupo[item.chave] && (
                   <View style={{ marginTop: 10 }}>
                     <Text style={{ color: tema.itemColor, fontWeight: "bold" }}>Membros:</Text>
                     {membrosGrupo[item.chave].map((membro, i) => (
-                    <Text key={i} style={{ color: tema.textColor, marginLeft: 10 }}>
+                      <Text key={i} style={{ color: tema.textColor, marginLeft: 10 }}>
                         {membro.lider ? "👑 " : "👤 "}
                         {membro.nome} ({membro.email})
-                    </Text>
+                      </Text>
                     ))}
                   </View>
                 )}
@@ -170,6 +193,7 @@ const styles = StyleSheet.create({
   },
   grupoNome: { fontSize: 18, fontWeight: "bold" },
   descricao: { marginTop: 4 },
+  papel: { marginTop: 6, fontWeight: "600" },
   input: { marginTop: 10, borderWidth: 1, borderRadius: 6, padding: 10, fontSize: 15 },
   botaoAdicionar: {
     marginTop: 10,
@@ -180,5 +204,12 @@ const styles = StyleSheet.create({
   botaoTexto: {
     color: "#fff",
     fontWeight: "bold",
+  },
+  botaoAtualizar: {
+    alignSelf: "flex-end",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 8,
   },
 });

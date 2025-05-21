@@ -11,14 +11,13 @@ app.use(express.json());
 // ===== RAIZ E TESTE =====
 app.get('/', (req, res) => {
   res.send('Servidor BTCF está rodando!');
-}); 
+});
 
 app.get('/testdb', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');
     res.json({ status: 'ok', message: 'Conexão bem-sucedida', timestamp: result.rows[0].now });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ status: 'error', message: 'Erro na conexão', error: error.message });
   }
 });
@@ -43,7 +42,6 @@ app.get('/grafico/gastos/:grupoId/:anoMes', async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: 'Erro ao buscar totais', detalhes: err.message });
   }
 });
@@ -67,7 +65,6 @@ app.get('/transacoes/:grupoId/:anoMes', async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: 'Erro ao buscar transações', detalhes: err.message });
   }
 });
@@ -78,7 +75,6 @@ app.get('/entrada', async (req, res) => {
     const result = await pool.query('SELECT * FROM entrada ORDER BY chave DESC');
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -114,7 +110,6 @@ app.post('/entrada', async (req, res) => {
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: "Erro ao inserir entrada", detalhes: err.message });
   }
 });
@@ -125,7 +120,6 @@ app.get('/saida', async (req, res) => {
     const result = await pool.query('SELECT * FROM saida ORDER BY chave DESC');
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -161,7 +155,6 @@ app.post('/saida', async (req, res) => {
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: "Erro ao inserir saída", detalhes: err.message });
   }
 });
@@ -176,7 +169,6 @@ app.post('/usuario', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -190,7 +182,6 @@ app.post('/usuario/login', async (req, res) => {
     }
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -207,8 +198,47 @@ app.get('/usuario/por-email/:email', async (req, res) => {
     }
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: err.message });
+  }
+});
+
+// ===== ATUALIZAÇÃO DE USUÁRIO (nome e/ou senha) =====
+app.put('/usuario/:id', async (req, res) => {
+  const { id } = req.params;
+  const { nome, senha } = req.body;
+
+  if (!nome && !senha) {
+    return res.status(400).json({ erro: "Informe ao menos um campo para atualizar (nome ou senha)." });
+  }
+
+  try {
+    const campos = [];
+    const valores = [];
+    let idx = 1;
+
+    if (nome) {
+      campos.push(`nome = $${idx++}`);
+      valores.push(nome);
+    }
+    if (senha) {
+      campos.push(`senha = $${idx++}`);
+      valores.push(senha);
+    }
+
+    valores.push(id);
+
+    const result = await pool.query(
+      `UPDATE usuario SET ${campos.join(', ')} WHERE chave = $${idx} RETURNING chave, nome, email`,
+      valores
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ erro: "Usuário não encontrado para atualização." });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ erro: "Erro ao atualizar usuário", detalhes: err.message });
   }
 });
 
@@ -218,7 +248,6 @@ app.get('/grupo', async (req, res) => {
     const result = await pool.query('SELECT * FROM grupo ORDER BY chave DESC');
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -227,14 +256,16 @@ app.get('/grupo/usuario/:usuarioId', async (req, res) => {
   const { usuarioId } = req.params;
   try {
     const result = await pool.query(
-      `SELECT g.* FROM grupo g
-       JOIN pessoasgrupo pg ON g.chave = pg.chavegrupo
-       WHERE pg.chaveusuario = $1 ORDER BY g.chave DESC`,
+      `SELECT DISTINCT g.*, 
+              CASE WHEN g.chaveusuariocriou = $1 THEN true ELSE false END AS soucriador
+         FROM grupo g
+         LEFT JOIN pessoasgrupo pg ON g.chave = pg.chavegrupo
+        WHERE g.chaveusuariocriou = $1 OR pg.chaveusuario = $1
+        ORDER BY g.chave DESC`,
       [usuarioId]
     );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -243,9 +274,9 @@ app.post('/grupo', async (req, res) => {
   const { nome, descricao, chaveusuario } = req.body;
   try {
     const grupoResult = await pool.query(
-      `INSERT INTO grupo (nome, descricao, criado_em, atualizado_em)
-       VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING *`,
-      [nome, descricao]
+      `INSERT INTO grupo (nome, descricao, criado_em, atualizado_em, chaveusuariocriou)
+       VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $3) RETURNING *`,
+      [nome, descricao, chaveusuario]
     );
     const grupoCriado = grupoResult.rows[0];
     await pool.query(
@@ -255,7 +286,6 @@ app.post('/grupo', async (req, res) => {
     );
     res.status(201).json(grupoCriado);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -289,7 +319,6 @@ app.post('/grupo/adicionar-pessoa', async (req, res) => {
 
     res.status(201).json({ mensagem: "Usuário adicionado ao grupo com sucesso!" });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -305,7 +334,6 @@ app.get('/grupo/:grupoId/membros', async (req, res) => {
     );
     res.status(200).json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ erro: err.message });
   }
 });
