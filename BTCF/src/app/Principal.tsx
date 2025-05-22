@@ -33,7 +33,6 @@ export default function Principal() {
   const [grupoSelecionado, setGrupoSelecionado] = useState<any>(null);
   const [totais, setTotais] = useState({ entradas: 0, saidas: 0 });
 
-  // ✅ Atualiza os grupos toda vez que a tela ganha foco
   useFocusEffect(
     useCallback(() => {
       carregarGruposESelecionar();
@@ -93,15 +92,19 @@ export default function Principal() {
       if (!ip || !grupoSelecionado?.chave) return;
 
       const anoMes = dataAtual.toISOString().slice(0, 7);
-      const res = await fetch(`${ip}/grafico/gastos/${grupoSelecionado.chave}/${anoMes}`);
+      const url = `${ip}/grafico/gastos/${grupoSelecionado.chave}/${anoMes}`;
+
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Erro ao buscar totais.");
+
       const data = await res.json();
 
       let entradas = 0, saidas = 0;
-      data.forEach((item: any) => {
-        if (item.tipo === "entrada") entradas += Number(item.total);
-        else if (item.tipo === "saida") saidas += Number(item.total);
-      });
+      for (const item of data) {
+        const valor = Number(item.total);
+        if (item.tipo === "entrada") entradas += valor;
+        if (item.tipo === "saida") saidas += valor;
+      }
 
       setTotais({ entradas, saidas });
     } catch (err: any) {
@@ -114,7 +117,6 @@ export default function Principal() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
-      {/* Filtros */}
       <View style={styles.filtrosRow}>
         <TouchableOpacity onPress={() => setModalGrupoVisivel(true)} style={styles.filtroBotao}>
           <Text style={[styles.filtroTexto, { color: tema.textColor }]}>
@@ -131,7 +133,6 @@ export default function Principal() {
         </TouchableOpacity>
       </View>
 
-      {/* Totais */}
       <View style={styles.cardTotais}>
         <Text style={[styles.valorTotal, { color: tema.textColor }]}>Saldo Total</Text>
         <Text style={[styles.valorSaldo, { color: tema.textColor }]}>
@@ -143,7 +144,6 @@ export default function Principal() {
         </View>
       </View>
 
-      {/* Gráfico */}
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>Resumo Gráfico</Text>
       <PieChart
         data={[
@@ -159,7 +159,6 @@ export default function Principal() {
         absolute
       />
 
-      {/* Ações */}
       <View style={styles.botoesContainer}>
         <TouchableOpacity style={[styles.botaoAcao, { backgroundColor: tema.linkColor }]} onPress={() => router.push("/MovimentacaoEntrada")}>
           <Text style={styles.botaoTexto}>➕ Entrada</Text>
@@ -169,7 +168,6 @@ export default function Principal() {
         </TouchableOpacity>
       </View>
 
-      {/* Modal de Grupo */}
       <Modal visible={modalGrupoVisivel} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={styles.modalBox}>
@@ -195,7 +193,6 @@ export default function Principal() {
         </View>
       </Modal>
 
-      {/* Modal de Mês */}
       <Modal visible={modalDataVisivel} transparent animationType="fade">
         <View style={styles.modalContainer}>
           <View style={styles.modalBox}>

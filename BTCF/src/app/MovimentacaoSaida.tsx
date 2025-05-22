@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -23,25 +23,76 @@ type Transacao = {
 
 export default function MovimentacaoSaida() {
   const { tema } = useTheme();
-  const [valor, setValor] = useState<string>("");
-  const [tipo, setTipo] = useState<string>("avista");
-  const [parcelas, setParcelas] = useState<string>("");
-  const [valorParcela, setValorParcela] = useState<string>("");
-  const [dataTermino, setDataTermino] = useState<string>("");
-  const [data, setData] = useState<string>(new Date().toISOString().slice(0, 10));
-  const [descricao, setDescricao] = useState<string>("");
+  const [valorRaw, setValorRaw] = useState("");
+  const [valor, setValor] = useState("0,00");
+  const [tipo, setTipo] = useState("avista");
+  const [parcelas, setParcelas] = useState("");
+  const [valorParcela, setValorParcela] = useState("");
+  const [dataTermino, setDataTermino] = useState("");
+  const [data, setData] = useState(new Date().toISOString().slice(0, 10));
+  const [descricao, setDescricao] = useState("");
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
+  const [grupos, setGrupos] = useState<any[]>([]);
+  const [grupoSelecionado, setGrupoSelecionado] = useState<number | null>(null);
+
+  const CHAVE_HISTORICO = "historico_saidas";
 
   useEffect(() => {
-    if (tipo === "parcelado" && valor && parcelas) {
+    carregarGrupos();
+    carregarHistoricoLocal();
+  }, []);
+
+  const carregarHistoricoLocal = async () => {
+    const dados = await AsyncStorage.getItem(CHAVE_HISTORICO);
+    if (dados) {
+      try {
+        const lista: Transacao[] = JSON.parse(dados);
+        setTransacoes(lista);
+      } catch (e) {
+        console.error("Erro ao carregar histórico local:", e);
+      }
+    }
+  };
+
+  const salvarHistoricoLocal = async (lista: Transacao[]) => {
+    try {
+      await AsyncStorage.setItem(CHAVE_HISTORICO, JSON.stringify(lista));
+    } catch (e) {
+      console.error("Erro ao salvar histórico local:", e);
+    }
+  };
+
+  const carregarGrupos = async () => {
+    try {
+      const email = await AsyncStorage.getItem("usuarioEmail");
+      const ip = await AsyncStorage.getItem("ipServidor");
+      if (!email || !ip) throw new Error("Dados de autenticação ausentes.");
+
+      const usuarioRes = await fetch(`${ip}/usuario/por-email/${email}`);
+      const usuario = await usuarioRes.json();
+
+      const gruposRes = await fetch(`${ip}/grupo/usuario/${usuario.chave}`);
+      const lista = await gruposRes.json();
+      setGrupos(lista);
+
+      const grupoSalvo = await AsyncStorage.getItem("grupoSelecionado");
+      const grupoId = grupoSalvo ? parseInt(grupoSalvo) : lista[0]?.chave;
+      setGrupoSelecionado(grupoId);
+    } catch (err) {
+      console.error("Erro ao carregar grupos:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (tipo === "parcelado" && valorRaw && parcelas) {
       const qtd = parseInt(parcelas);
-      const val = parseFloat(valor.replace(/\D/g, "")) / 100;
+      const val = parseFloat(valorRaw) / 100;
       if (!isNaN(qtd) && qtd > 0 && !isNaN(val)) {
         setValorParcela((val / qtd).toFixed(2));
-        const now = new Date(data);
-        now.setMonth(now.getMonth() + qtd);
-        setDataTermino(now.toISOString().slice(0, 10));
+        const fim = new Date(data);
+        fim.setMonth(fim.getMonth() + qtd);
+        setDataTermino(fim.toISOString().slice(0, 10));
       } else {
         setValorParcela("");
         setDataTermino("");
@@ -50,39 +101,37 @@ export default function MovimentacaoSaida() {
       setValorParcela("");
       setDataTermino("");
     }
-  }, [tipo, valor, parcelas, data]);
+  }, [tipo, valorRaw, parcelas, data]);
 
-  const formatarValor = (texto: string) => {
+  const formatarComoMoeda = (texto: string) => {
     const numeros = texto.replace(/\D/g, "");
-    const numeroFormatado = (parseInt(numeros || "0") / 100).toFixed(2);
-    return numeroFormatado.replace(".", ",");
+    const inteiro = numeros.padStart(3, "0");
+    const valorNumerico = (parseInt(inteiro, 10) / 100).toFixed(2);
+    return valorNumerico.replace(".", ",");
   };
 
-  const gerarDescricaoPadrao = (tipo: string, valor: string): string => {
-    return `Gasto ${tipo === "parcelado" ? "parcelado" : "à vista"} de R$ ${valor}`;
-  };
-
-  const getApiUrl = async (): Promise<string> => {
-    const ip = await AsyncStorage.getItem("ipServidor");
-    if (!ip) throw new Error("IP do servidor não configurado.");
-    return `${ip}/saida`;
-  };
+  const gerarDescricaoPadrao = (tipo: string, valor: string) =>
+    `Gasto ${tipo === "parcelado" ? "parcelado" : "à vista"} de R$ ${valor}`;
 
   const handleSalvar = async () => {
-    if (!valor || (tipo === "parcelado" && (!parcelas || parseInt(parcelas) <= 0))) {
+    if (!valorRaw || (tipo === "parcelado" && (!parcelas || parseInt(parcelas) <= 0))) {
       Alert.alert("Erro", "Preencha corretamente os campos obrigatórios.");
+      return;
+    }
+    if (!grupoSelecionado) {
+      Alert.alert("Erro", "Selecione um grupo.");
       return;
     }
 
     try {
       setLoading(true);
+      const usuarioId = await AsyncStorage.getItem("usuarioId");
+      const ip = await AsyncStorage.getItem("ipServidor");
+      if (!usuarioId || !ip) throw new Error("Dados incompletos.");
 
-      const valorNumerico = parseFloat(valor.replace(/\D/g, "")) / 100;
+      const valorNumerico = parseFloat(valorRaw) / 100;
       const valorParcelaNumerico = valorParcela ? parseFloat(valorParcela) : valorNumerico;
       const dataFimParcelas = tipo === "parcelado" ? dataTermino : data;
-
-      const usuarioId = await AsyncStorage.getItem("usuarioId");
-      if (!usuarioId) throw new Error("Usuário não identificado.");
 
       const body = {
         tipo,
@@ -92,19 +141,16 @@ export default function MovimentacaoSaida() {
         valorparc: valorParcelaNumerico,
         datafimparc: dataFimParcelas,
         chavepessoa: parseInt(usuarioId),
+        chavegrupo: grupoSelecionado,
       };
 
-      const apiUrl = await getApiUrl();
-
-      const response = await fetch(apiUrl, {
+      const response = await fetch(`${ip}/saida`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
 
-      if (!response.ok) {
-        throw new Error("Erro ao inserir a saída");
-      }
+      if (!response.ok) throw new Error("Erro ao inserir saída");
 
       const resposta = await response.json();
 
@@ -116,9 +162,14 @@ export default function MovimentacaoSaida() {
         data: resposta.datacad,
       };
 
-      setTransacoes((prev) => [novaTransacao, ...prev]);
+      await AsyncStorage.setItem("grupoSelecionado", grupoSelecionado.toString());
 
-      setValor("");
+      const novaLista = [novaTransacao, ...transacoes];
+      setTransacoes(novaLista);
+      await salvarHistoricoLocal(novaLista);
+
+      setValorRaw("");
+      setValor("0,00");
       setTipo("avista");
       setParcelas("");
       setValorParcela("");
@@ -126,41 +177,56 @@ export default function MovimentacaoSaida() {
       setDescricao("");
       setData(new Date().toISOString().slice(0, 10));
 
-      Alert.alert("✅ Sucesso", "Saída salva com sucesso!");
-    } catch (error: unknown) {
-      console.error(error);
-      const mensagem = error instanceof Error ? error.message : "Erro ao salvar saída.";
-      Alert.alert("Erro", `Erro ao salvar saída: ${mensagem}`);
+      Alert.alert("✅ Sucesso", "Saída registrada com sucesso.");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Erro ao salvar.";
+      Alert.alert("Erro", msg);
     } finally {
       setLoading(false);
     }
   };
 
-  const renderItem = ({ item }: { item: Transacao }) => (
-    <View style={[styles.card, { backgroundColor: tema.sectionBoxBackground }]}>
-      <Text style={[styles.cardValor, { color: "#e53935" }]}>
-        🔻 {item.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-      </Text>
-      <Text style={[styles.cardInfo, { color: tema.textColor }]}>📝 {item.descricao}</Text>
-      <Text style={[styles.cardInfo, { color: tema.textColor }]}>
-        📅 {new Date(item.data).toLocaleDateString("pt-BR")}
-      </Text>
-      <Text style={[styles.cardInfo, { color: tema.textColor }]}>Tipo: {item.tipo}</Text>
-    </View>
-  );
+  const renderFormulario = useCallback(() => (
+    <>
+      <Text style={[styles.label, { color: tema.textColor }]}>Grupo</Text>
+      <View style={[styles.pickerContainer, { borderColor: tema.inputBorderColor }]}>
+        <Picker
+          selectedValue={grupoSelecionado}
+          onValueChange={setGrupoSelecionado}
+          style={{ color: "#000" }}
+        >
+          {grupos.map((grupo) => (
+            <Picker.Item key={grupo.chave} label={grupo.nome} value={grupo.chave} />
+          ))}
+        </Picker>
+      </View>
 
-  const botaoDesabilitado = !valor || (tipo === "parcelado" && (!parcelas || parseInt(parcelas) <= 0)) || loading;
+      <TouchableOpacity
+        onPress={carregarGrupos}
+        style={[styles.botao, { backgroundColor: "#e53935", marginTop: 10 }]}
+      >
+        <Text style={styles.botaoTexto}>🔄 Atualizar Grupos</Text>
+      </TouchableOpacity>
 
-  return (
-    <View style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
       <Text style={[styles.label, { color: tema.textColor }]}>Valor da Saída (R$)</Text>
       <TextInput
-        style={[styles.input, { borderColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground, color: tema.textColor }]}
+        style={[
+          styles.input,
+          {
+            borderColor: tema.inputBorderColor,
+            backgroundColor: tema.sectionBoxBackground,
+            color: tema.textColor,
+          },
+        ]}
         keyboardType="numeric"
         placeholder="0,00"
         placeholderTextColor={tema.itemColor}
         value={valor}
-        onChangeText={(text) => setValor(formatarValor(text))}
+        onChangeText={(text) => {
+          const limpo = text.replace(/\D/g, "");
+          setValorRaw(limpo);
+          setValor(formatarComoMoeda(limpo));
+        }}
       />
 
       <Text style={[styles.label, { color: tema.textColor }]}>Data</Text>
@@ -182,24 +248,20 @@ export default function MovimentacaoSaida() {
 
       {tipo === "parcelado" && (
         <>
-          <Text style={[styles.label, { color: tema.textColor }]}>Quantidade de Parcelas *</Text>
+          <Text style={[styles.label, { color: tema.textColor }]}>Parcelas *</Text>
           <TextInput
             style={[styles.input, { borderColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground, color: tema.textColor }]}
             keyboardType="numeric"
-            placeholder="Ex: 3"
-            placeholderTextColor={tema.itemColor}
             value={parcelas}
             onChangeText={setParcelas}
           />
-
-          <Text style={[styles.label, { color: tema.textColor }]}>Valor de Cada Parcela</Text>
+          <Text style={[styles.label, { color: tema.textColor }]}>Valor por Parcela</Text>
           <TextInput
             style={[styles.input, { backgroundColor: "#e0e0e0", color: tema.textColor }]}
             editable={false}
             value={valorParcela ? parseFloat(valorParcela).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : ""}
           />
-
-          <Text style={[styles.label, { color: tema.textColor }]}>Término do Parcelamento</Text>
+          <Text style={[styles.label, { color: tema.textColor }]}>Fim do Parcelamento</Text>
           <TextInput
             style={[styles.input, { backgroundColor: "#e0e0e0", color: tema.textColor }]}
             editable={false}
@@ -211,28 +273,44 @@ export default function MovimentacaoSaida() {
       <Text style={[styles.label, { color: tema.textColor }]}>Descrição (opcional)</Text>
       <TextInput
         style={[styles.input, { borderColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground, color: tema.textColor }]}
-        placeholder="Ex: Supermercado, gasolina, aluguel..."
-        placeholderTextColor={tema.itemColor}
         value={descricao}
         onChangeText={setDescricao}
       />
 
       <TouchableOpacity
-        style={[styles.botao, botaoDesabilitado && { backgroundColor: tema.itemColor }]}
+        style={[styles.botao, (!valorRaw || loading) && { backgroundColor: tema.itemColor }]}
         onPress={handleSalvar}
-        disabled={botaoDesabilitado}
+        disabled={!valorRaw || loading}
       >
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.botaoTexto}>Salvar Saída</Text>}
       </TouchableOpacity>
+    </>
+  ), [
+    tema, grupoSelecionado, grupos, valor, tipo, parcelas, valorParcela,
+    dataTermino, data, descricao, loading
+  ]);
 
-      <Text style={[styles.label, { marginTop: 32, color: tema.textColor }]}>Saídas Registradas</Text>
-      <FlatList
-        data={transacoes}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 100 }}
-      />
+  const renderItem = ({ item }: { item: Transacao }) => (
+    <View style={[styles.card, { backgroundColor: tema.sectionBoxBackground }]}>
+      <Text style={[styles.cardValor, { color: "#e53935" }]}>
+        🔻 {item.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+      </Text>
+      <Text style={[styles.cardInfo, { color: tema.textColor }]}>📝 {item.descricao}</Text>
+      <Text style={[styles.cardInfo, { color: tema.textColor }]}>
+        📅 {new Date(item.data).toLocaleDateString("pt-BR")}
+      </Text>
+      <Text style={[styles.cardInfo, { color: tema.textColor }]}>Tipo: {item.tipo}</Text>
     </View>
+  );
+
+  return (
+    <FlatList
+      data={transacoes}
+      keyExtractor={(item, index) => (item.id ? item.id.toString() : index.toString())}
+      renderItem={renderItem}
+      ListHeaderComponent={renderFormulario}
+      contentContainerStyle={{ padding: 24, paddingBottom: 100, backgroundColor: tema.backgroundColor }}
+    />
   );
 }
 
