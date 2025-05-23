@@ -97,7 +97,7 @@ export default function Login() {
     console.log("Botão de servidor clicado");
     animateButton(scaleServidor);
     setTimeout(() => {
-      router.push("/ServidorConfig");
+      router.push("/Servidor");
     }, 200);
   }
 
