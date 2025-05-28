@@ -35,7 +35,7 @@ export default function Cadastro() {
   function irParaServidor() {
     animateButton(scaleServidor);
     setTimeout(() => {
-      router.push("/ServidorConfig");
+      router.push("/Servidorconfig");
     }, 200);
   }
 

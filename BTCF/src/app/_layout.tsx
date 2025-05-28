@@ -157,7 +157,7 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         />
         <DrawerItem
           label="🖥️ Servidor"
-          onPress={() => navigation.navigate("ServidorConfig")}
+          onPress={() => navigation.navigate("Servidorconfig")}
           labelStyle={{ color: tema.textColor }}
           style={{ backgroundColor: itemBackgroundColor }}
           activeBackgroundColor={activeBackgroundColor}
