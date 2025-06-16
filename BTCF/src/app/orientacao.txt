@@ -2,3 +2,10 @@ execute o projeto na pasta BTCF no terminal inicie com >> npx expo start --tunne
 
 No terminal do ServidorBTCF inicie com >> npm start
 
+
+
+
+NOVO ---
+C:\Users\paulo\Documents\GitHub\Controle-Financeiro\BTCF>
+
+-> npx expo start
