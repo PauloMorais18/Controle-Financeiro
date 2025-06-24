@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
+  ScrollView,
   Alert,
   ActivityIndicator,
 } from "react-native";
@@ -63,26 +63,35 @@ export default function MovimentacaoSaida() {
     }
   };
 
-  const carregarGrupos = async () => {
-    try {
-      const email = await AsyncStorage.getItem("usuarioEmail");
-      const ip = await AsyncStorage.getItem("ipServidor");
-      if (!email || !ip) throw new Error("Dados de autenticação ausentes.");
+const carregarGrupos = async () => {
+  try {
+    const email = await AsyncStorage.getItem("usuarioEmail");
+    const ip = await AsyncStorage.getItem("ipServidor");
+    if (!email || !ip) throw new Error("Dados de autenticação ausentes.");
 
-      const usuarioRes = await fetch(`${ip}/usuario/por-email/${email}`);
-      const usuario = await usuarioRes.json();
+    const usuarioRes = await fetch(`${ip}/usuario/por-email/${email}`);
+    const usuario = await usuarioRes.json();
 
-      const gruposRes = await fetch(`${ip}/grupo/usuario/${usuario.chave}`);
-      const lista = await gruposRes.json();
-      setGrupos(lista);
+    const gruposRes = await fetch(`${ip}/grupo/usuario/${usuario.chave}`);
+    const lista = await gruposRes.json();
 
-      const grupoSalvo = await AsyncStorage.getItem("grupoSelecionado");
-      const grupoId = grupoSalvo ? parseInt(grupoSalvo) : lista[0]?.chave;
-      setGrupoSelecionado(grupoId);
-    } catch (err) {
-      console.error("Erro ao carregar grupos:", err);
+    setGrupos(lista);
+
+    const grupoSalvo = await AsyncStorage.getItem("grupoSelecionado");
+    const grupoValido = grupoSalvo && lista.some(g => g.chave === parseInt(grupoSalvo));
+    const grupoId = grupoValido ? parseInt(grupoSalvo!) : lista[0]?.chave;
+
+    if (!grupoId) {
+      Alert.alert("Atenção", "Você ainda não faz parte de nenhum grupo.");
+      return;
     }
-  };
+
+    setGrupoSelecionado(grupoId);
+  } catch (err: any) {
+    console.error("Erro ao carregar grupos:", err);
+    Alert.alert("Erro ao carregar grupos", err.message || "Erro desconhecido.");
+  }
+};
 
   useEffect(() => {
     if (tipo === "parcelado" && valorRaw && parcelas) {
@@ -186,38 +195,38 @@ export default function MovimentacaoSaida() {
     }
   };
 
-  const renderFormulario = useCallback(() => (
+  const renderItem = (item: Transacao) => (
+    <View key={item.id} style={[styles.card, { backgroundColor: tema.sectionBoxBackground }]}>
+      <Text style={[styles.cardValor, { color: "#e53935" }]}>
+        🔻 {item.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+      </Text>
+      <Text style={[styles.cardInfo, { color: tema.textColor }]}>📝 {item.descricao}</Text>
+      <Text style={[styles.cardInfo, { color: tema.textColor }]}>
+        📅 {new Date(item.data).toLocaleDateString("pt-BR")}
+      </Text>
+      <Text style={[styles.cardInfo, { color: tema.textColor }]}>Tipo: {item.tipo}</Text>
+    </View>
+  );
+
+  // FORMULÁRIO
+  const renderFormulario = () => (
     <>
       <Text style={[styles.label, { color: tema.textColor }]}>Grupo</Text>
       <View style={[styles.pickerContainer, { borderColor: tema.inputBorderColor }]}>
-        <Picker
-          selectedValue={grupoSelecionado}
-          onValueChange={setGrupoSelecionado}
-          style={{ color: "#000" }}
-        >
+        <Picker selectedValue={grupoSelecionado} onValueChange={setGrupoSelecionado} style={{ color: "#000" }}>
           {grupos.map((grupo) => (
             <Picker.Item key={grupo.chave} label={grupo.nome} value={grupo.chave} />
           ))}
         </Picker>
       </View>
 
-      <TouchableOpacity
-        onPress={carregarGrupos}
-        style={[styles.botao, { backgroundColor: "#e53935", marginTop: 10 }]}
-      >
+      <TouchableOpacity onPress={carregarGrupos} style={[styles.botao, { backgroundColor: "#e53935", marginTop: 10 }]}>
         <Text style={styles.botaoTexto}>🔄 Atualizar Grupos</Text>
       </TouchableOpacity>
 
       <Text style={[styles.label, { color: tema.textColor }]}>Valor da Saída (R$)</Text>
       <TextInput
-        style={[
-          styles.input,
-          {
-            borderColor: tema.inputBorderColor,
-            backgroundColor: tema.sectionBoxBackground,
-            color: tema.textColor,
-          },
-        ]}
+        style={[styles.input, { borderColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground, color: tema.textColor }]}
         keyboardType="numeric"
         placeholder="0,00"
         placeholderTextColor={tema.itemColor}
@@ -265,7 +274,7 @@ export default function MovimentacaoSaida() {
           <TextInput
             style={[styles.input, { backgroundColor: "#e0e0e0", color: tema.textColor }]}
             editable={false}
-            value={dataTermino}
+            value={dataTermino} 
           />
         </>
       )}
@@ -285,41 +294,36 @@ export default function MovimentacaoSaida() {
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.botaoTexto}>Salvar Saída</Text>}
       </TouchableOpacity>
     </>
-  ), [
-    tema, grupoSelecionado, grupos, valor, tipo, parcelas, valorParcela,
-    dataTermino, data, descricao, loading
-  ]);
-
-  const renderItem = ({ item }: { item: Transacao }) => (
-    <View style={[styles.card, { backgroundColor: tema.sectionBoxBackground }]}>
-      <Text style={[styles.cardValor, { color: "#e53935" }]}>
-        🔻 {item.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-      </Text>
-      <Text style={[styles.cardInfo, { color: tema.textColor }]}>📝 {item.descricao}</Text>
-      <Text style={[styles.cardInfo, { color: tema.textColor }]}>
-        📅 {new Date(item.data).toLocaleDateString("pt-BR")}
-      </Text>
-      <Text style={[styles.cardInfo, { color: tema.textColor }]}>Tipo: {item.tipo}</Text>
-    </View>
   );
 
   return (
-    <FlatList
-      data={transacoes}
-      keyExtractor={(item, index) => (item.id ? item.id.toString() : index.toString())}
-      renderItem={renderItem}
-      ListHeaderComponent={renderFormulario}
-      contentContainerStyle={{ padding: 24, paddingBottom: 100, backgroundColor: tema.backgroundColor }}
-    />
+    <ScrollView style={{ flex: 1, backgroundColor: tema.backgroundColor }}>
+      <View style={{ padding: 24, paddingBottom: 100 }}>
+        {renderFormulario()}
+        {transacoes.map(renderItem)}
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24 },
   label: { fontSize: 16, fontWeight: "bold", marginTop: 16, marginBottom: 4 },
-  input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, marginBottom: 8 },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 16,
+    marginBottom: 8,
+  },
   pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 8 },
-  botao: { marginTop: 20, backgroundColor: "#e53935", paddingVertical: 12, borderRadius: 8, alignItems: "center" },
+  botao: {
+    marginTop: 20,
+    backgroundColor: "#e53935",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
   botaoTexto: { fontSize: 16, fontWeight: "bold", color: "#fff" },
   card: { padding: 16, borderRadius: 8, marginVertical: 8, elevation: 3 },
   cardValor: { fontSize: 18, fontWeight: "bold" },

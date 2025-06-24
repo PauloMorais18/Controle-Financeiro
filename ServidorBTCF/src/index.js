@@ -72,7 +72,8 @@ app.get('/entrada', async (req, res) => {
     const result = await pool.query('SELECT * FROM entrada ORDER BY chave DESC');
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ erro: err.message });
+    console.error("❌ Erro ao buscar entradas:", err);
+    res.status(500).json({ erro: "Erro ao buscar entradas", detalhes: err.message });
   }
 });
 
@@ -82,37 +83,51 @@ app.post('/entrada', async (req, res) => {
     datafimparc, chavepessoa, chavegrupo
   } = req.body;
 
-  if (typeof chavepessoa !== 'number' || isNaN(chavepessoa)) {
-    return res.status(400).json({ erro: "Campo 'chavepessoa' deve ser um número válido." });
+  console.log("📥 Dados recebidos em /entrada:", {
+    tipo, valor, descricao, qtdeparc, valorparc,
+    datafimparc, chavepessoa, chavegrupo
+  });
+
+  // Verificação de tipos
+  const chavePessoaNum = Number(chavepessoa);
+  const chaveGrupoNum = Number(chavegrupo);
+
+  if (!Number.isInteger(chavePessoaNum)) {
+    return res.status(400).json({ erro: "Campo 'chavepessoa' deve ser um número inteiro." });
   }
 
-  if (typeof chavegrupo !== 'number' || isNaN(chavegrupo)) {
-    return res.status(400).json({ erro: "Campo 'chavegrupo' deve ser um número válido." });
+  if (!Number.isInteger(chaveGrupoNum)) {
+    return res.status(400).json({ erro: "Campo 'chavegrupo' deve ser um número inteiro." });
   }
 
   try {
     const verifica = await pool.query(
       `SELECT 1 FROM pessoasgrupo WHERE chaveusuario = $1 AND chavegrupo = $2`,
-      [chavepessoa, chavegrupo]
+      [chavePessoaNum, chaveGrupoNum]
     );
 
     if (verifica.rows.length === 0) {
+      console.warn("⚠️ Usuário não pertence ao grupo:", { chavePessoaNum, chaveGrupoNum });
       return res.status(403).json({ erro: "Usuário não pertence ao grupo informado." });
     }
 
     const resultado = await pool.query(
       `INSERT INTO entrada 
-       (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo)
+        (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo)
        VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8)
        RETURNING *`,
-      [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo]
+      [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavePessoaNum, chaveGrupoNum]
     );
 
+    console.log("✅ Entrada salva com sucesso:", resultado.rows[0]);
     res.status(201).json(resultado.rows[0]);
+
   } catch (err) {
+    console.error("❌ Erro ao salvar entrada:", err);
     res.status(500).json({ erro: "Erro ao salvar entrada", detalhes: err.message });
   }
 });
+
 
 // ===== SAÍDAS =====
 app.get('/saida', async (req, res) => {

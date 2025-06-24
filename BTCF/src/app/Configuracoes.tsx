@@ -35,6 +35,16 @@ export default function Configuracoes() {
     Alert.alert("Exportar Dados", `Os dados foram enviados para: ${emailExportacao}`);
   }
 
+  async function handleLimparDados() {
+    try {
+      await AsyncStorage.clear();
+      Alert.alert("🧹 Dados limpos", "Todos os dados do aplicativo foram apagados com sucesso.");
+    } catch (error) {
+      console.error("Erro ao limpar AsyncStorage:", error);
+      Alert.alert("Erro", "Não foi possível limpar os dados.");
+    }
+  }
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>👤 Perfil</Text>
@@ -70,7 +80,7 @@ export default function Configuracoes() {
           style={[
             styles.input,
             {
-              backgroundColor: "#e0e0e0", // cor acinzentada para mostrar que está desabilitado
+              backgroundColor: "#e0e0e0",
               borderColor: tema.inputBorderColor,
               color: "#888",
             },
@@ -104,6 +114,10 @@ export default function Configuracoes() {
         <Text style={[styles.link, { color: tema.linkColor }]}>Política de Privacidade</Text>
         <Text style={[styles.link, { color: tema.linkColor }]}>Suporte</Text>
       </View>
+
+      <TouchableOpacity style={[styles.button, { backgroundColor: "#D32F2F" }]} onPress={handleLimparDados}>
+        <Text style={styles.buttonText}>🧹 Limpar Dados do Aplicativo</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
