@@ -37,19 +37,11 @@ export default function GerenciarGrupo() {
       const usuarioData = await usuarioRes.json();
       setUsuarioId(usuarioData.chave);
 
-      const gruposRes = await fetch(`${ip}/grupo`);
+      const gruposRes = await fetch(`${ip}/grupo/usuario/${usuarioData.chave}`);
       if (!gruposRes.ok) throw new Error("Erro ao buscar grupos.");
-      const todosGrupos = await gruposRes.json();
+      const grupos = await gruposRes.json();
+      setGrupos(grupos);
 
-      const participacaoRes = await fetch(`${ip}/grupo/usuario/${usuarioData.chave}`);
-      const gruposParticipante = participacaoRes.ok ? await participacaoRes.json() : [];
-
-      const idsParticipante = gruposParticipante.map((g: any) => g.chave);
-      const gruposFiltrados = todosGrupos.filter((grupo: any) =>
-        grupo.chaveusuariocriou === usuarioData.chave || idsParticipante.includes(grupo.chave)
-      );
-
-      setGrupos(gruposFiltrados);
     } catch (error: any) {
       console.error(error);
       Alert.alert("Erro", error.message);

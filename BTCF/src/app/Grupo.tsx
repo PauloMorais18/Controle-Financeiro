@@ -31,14 +31,22 @@ export default function Grupo() {
   async function listarGrupos() {
     try {
       const ip = await AsyncStorage.getItem("ipServidor");
-      if (!ip) throw new Error("IP do servidor não configurado.");
+      const usuarioId = await AsyncStorage.getItem("usuarioId");
 
-      const response = await fetch(`${ip}/grupo`);
-      if (!response.ok) throw new Error("Erro ao buscar grupos");
+      if (!ip || !usuarioId) {
+        throw new Error("IP ou ID do usuário não encontrados.");
+      }
+
+      const response = await fetch(`${ip}/grupo/usuario/${usuarioId}`);
+      if (!response.ok) {
+        const erroTexto = await response.text();
+        throw new Error(`Erro ao buscar grupos do usuário: ${erroTexto}`);
+      }
+
       const data = await response.json();
       setGrupos(data);
     } catch (error: any) {
-      console.error(error);
+      console.error("Erro ao listar grupos:", error);
       Alert.alert("Erro ao carregar grupos", error.message);
     }
   }
@@ -51,6 +59,7 @@ export default function Grupo() {
     try {
       const ip = await AsyncStorage.getItem("ipServidor");
       const usuarioId = await AsyncStorage.getItem("usuarioId");
+
       if (!ip) throw new Error("IP do servidor não configurado.");
       if (!usuarioId) throw new Error("Usuário não autenticado.");
 
@@ -121,7 +130,7 @@ export default function Grupo() {
             <Text style={[styles.groupName, { color: tema.textColor }]}>{item.nome}</Text>
             <Text style={{ color: tema.itemColor, fontSize: 13 }}>{item.descricao}</Text>
             <Text style={{ color: tema.itemColor, fontSize: 11, marginTop: 4 }}>
-              Criado em: {new Date(item.criado_em).toLocaleString()}
+              Criado em: {new Date(item.criado_em).toLocaleString("pt-BR")}
             </Text>
           </View>
         )}

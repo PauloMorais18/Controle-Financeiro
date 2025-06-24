@@ -68,12 +68,20 @@ app.get('/transacoes/:grupoId/:anoMes', async (req, res) => {
 
 // ===== ENTRADAS =====
 app.get('/entrada', async (req, res) => {
+  const { chavepessoa } = req.query;
+
+  if (!chavepessoa) {
+    return res.status(400).json({ erro: "Parâmetro 'chavepessoa' é obrigatório." });
+  }
+
   try {
-    const result = await pool.query('SELECT * FROM entrada ORDER BY chave DESC');
+    const result = await pool.query(
+      'SELECT * FROM entrada WHERE chavepessoa = $1 ORDER BY chave DESC',
+      [chavepessoa]
+    );
     res.json(result.rows);
   } catch (err) {
-    console.error("❌ Erro ao buscar entradas:", err);
-    res.status(500).json({ erro: "Erro ao buscar entradas", detalhes: err.message });
+    res.status(500).json({ erro: err.message });
   }
 });
 
@@ -131,8 +139,17 @@ app.post('/entrada', async (req, res) => {
 
 // ===== SAÍDAS =====
 app.get('/saida', async (req, res) => {
+  const { chavepessoa } = req.query;
+
+  if (!chavepessoa) {
+    return res.status(400).json({ erro: "Parâmetro 'chavepessoa' é obrigatório." });
+  }
+
   try {
-    const result = await pool.query('SELECT * FROM saida ORDER BY chave DESC');
+    const result = await pool.query(
+      'SELECT * FROM saida WHERE chavepessoa = $1 ORDER BY chave DESC',
+      [chavepessoa]
+    );
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -261,15 +278,7 @@ app.put('/usuario/:id', async (req, res) => {
 });
 
 // ===== GRUPO =====
-app.get('/grupo', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM grupo ORDER BY chave DESC');
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
-});
-
+// ✅ Rota para buscar grupos do usuário
 app.get('/grupo/usuario/:usuarioId', async (req, res) => {
   const { usuarioId } = req.params;
   try {
@@ -288,6 +297,7 @@ app.get('/grupo/usuario/:usuarioId', async (req, res) => {
   }
 });
 
+// ✅ Criar novo grupo e adicionar criador como membro e líder
 app.post('/grupo', async (req, res) => {
   const { nome, descricao, chaveusuario } = req.body;
   try {
@@ -297,17 +307,20 @@ app.post('/grupo', async (req, res) => {
       [nome, descricao, chaveusuario]
     );
     const grupoCriado = grupoResult.rows[0];
+
     await pool.query(
       `INSERT INTO pessoasgrupo (chaveusuario, chavegrupo, lider)
        VALUES ($1, $2, true)`,
       [chaveusuario, grupoCriado.chave]
     );
+
     res.status(201).json(grupoCriado);
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
 });
 
+// ✅ Adicionar pessoa a um grupo por e-mail
 app.post('/grupo/adicionar-pessoa', async (req, res) => {
   const { email, chavegrupo } = req.body;
   try {
@@ -320,11 +333,11 @@ app.post('/grupo/adicionar-pessoa', async (req, res) => {
     }
 
     const chaveusuario = usuarioResult.rows[0].chave;
+
     const jaExiste = await pool.query(
       `SELECT 1 FROM pessoasgrupo WHERE chaveusuario = $1 AND chavegrupo = $2`,
       [chaveusuario, chavegrupo]
     );
-
     if (jaExiste.rows.length > 0) {
       return res.status(409).json({ erro: "Usuário já está no grupo" });
     }
@@ -341,13 +354,15 @@ app.post('/grupo/adicionar-pessoa', async (req, res) => {
   }
 });
 
+// ✅ Listar membros de um grupo
 app.get('/grupo/:grupoId/membros', async (req, res) => {
   const { grupoId } = req.params;
   try {
     const result = await pool.query(
-      `SELECT u.nome, u.email, pg.lider FROM usuario u
-       JOIN pessoasgrupo pg ON u.chave = pg.chaveusuario
-       WHERE pg.chavegrupo = $1`,
+      `SELECT u.nome, u.email, pg.lider
+         FROM usuario u
+         JOIN pessoasgrupo pg ON u.chave = pg.chaveusuario
+        WHERE pg.chavegrupo = $1`,
       [grupoId]
     );
     res.status(200).json(result.rows);

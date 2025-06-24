@@ -34,22 +34,31 @@ export default function MovimentacaoEntrada() {
   const [loading, setLoading] = useState(false);
   const [grupos, setGrupos] = useState<any[]>([]);
   const [grupoSelecionado, setGrupoSelecionado] = useState<number | null>(null);
-
   const CHAVE_HISTORICO = "historico_entradas";
 
   useEffect(() => {
     carregarGrupos();
-    carregarHistoricoLocal();
+    carregarHistoricoDoServidor();
   }, []);
 
-  const carregarHistoricoLocal = async () => {
-    try {
-      const dados = await AsyncStorage.getItem(CHAVE_HISTORICO);
-      if (dados) setTransacoes(JSON.parse(dados));
-    } catch (e) {
-      console.error("Erro ao carregar histórico local:", e);
-    }
-  };
+const carregarHistoricoDoServidor = async () => {
+  try {
+    const usuarioId = await AsyncStorage.getItem("usuarioId");
+    const ip = await AsyncStorage.getItem("ipServidor");
+
+    if (!usuarioId || !ip) throw new Error("Usuário ou IP não encontrado.");
+
+    const response = await fetch(`${ip}/entrada?chavepessoa=${usuarioId}`);
+    const dados = await response.json();
+
+    if (!response.ok) throw new Error(dados.erro || "Erro ao buscar histórico.");
+
+    setTransacoes(dados);
+    await salvarHistoricoLocal(dados);
+  } catch (err: any) {
+    console.error("Erro ao carregar histórico do servidor:", err.message);
+  }
+};
 
   const salvarHistoricoLocal = async (lista: Transacao[]) => {
     try {
@@ -68,9 +77,10 @@ export default function MovimentacaoEntrada() {
       const usuarioRes = await fetch(`${ip}/usuario/por-email/${email}`);
       const usuario = await usuarioRes.json();
 
+      await AsyncStorage.setItem("usuarioId", String(usuario.chave));
+
       const gruposRes = await fetch(`${ip}/grupo/usuario/${usuario.chave}`);
       const lista = await gruposRes.json();
-
       setGrupos(lista);
 
       const grupoSalvo = await AsyncStorage.getItem("grupoSelecionado");
@@ -260,13 +270,20 @@ export default function MovimentacaoEntrada() {
 
         <Text style={[styles.label, { color: tema.textColor }]}>Data</Text>
         <TextInput
-          style={[styles.input, { borderColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground, color: tema.textColor }]}
+          style={[styles.input, {
+            borderColor: tema.inputBorderColor,
+            backgroundColor: tema.sectionBoxBackground,
+            color: tema.textColor,
+          }]}
           value={data}
           onChangeText={setData}
         />
 
         <Text style={[styles.label, { color: tema.textColor }]}>Tipo da Transação</Text>
-        <View style={[styles.pickerContainer, { borderColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground }]}>
+        <View style={[styles.pickerContainer, {
+          borderColor: tema.inputBorderColor,
+          backgroundColor: tema.sectionBoxBackground,
+        }]}>
           <Picker selectedValue={tipo} onValueChange={setTipo} style={{ color: "#000" }}>
             <Picker.Item label="À Vista" value="avista" />
             <Picker.Item label="Débito" value="debito" />
@@ -279,7 +296,11 @@ export default function MovimentacaoEntrada() {
           <>
             <Text style={[styles.label, { color: tema.textColor }]}>Parcelas *</Text>
             <TextInput
-              style={[styles.input, { borderColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground, color: tema.textColor }]}
+              style={[styles.input, {
+                borderColor: tema.inputBorderColor,
+                backgroundColor: tema.sectionBoxBackground,
+                color: tema.textColor,
+              }]}
               keyboardType="numeric"
               value={parcelas}
               onChangeText={setParcelas}
@@ -301,7 +322,11 @@ export default function MovimentacaoEntrada() {
 
         <Text style={[styles.label, { color: tema.textColor }]}>Descrição (opcional)</Text>
         <TextInput
-          style={[styles.input, { borderColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground, color: tema.textColor }]}
+          style={[styles.input, {
+            borderColor: tema.inputBorderColor,
+            backgroundColor: tema.sectionBoxBackground,
+            color: tema.textColor,
+          }]}
           value={descricao}
           onChangeText={setDescricao}
         />

@@ -40,18 +40,25 @@ export default function MovimentacaoSaida() {
 
   useEffect(() => {
     carregarGrupos();
-    carregarHistoricoLocal();
+    carregarHistoricoDoServidor();
   }, []);
 
-  const carregarHistoricoLocal = async () => {
-    const dados = await AsyncStorage.getItem(CHAVE_HISTORICO);
-    if (dados) {
-      try {
-        const lista: Transacao[] = JSON.parse(dados);
-        setTransacoes(lista);
-      } catch (e) {
-        console.error("Erro ao carregar histórico local:", e);
+  const carregarHistoricoDoServidor = async () => {
+    try {
+      const chavepessoa = await AsyncStorage.getItem("usuarioId");
+      const ip = await AsyncStorage.getItem("ipServidor");
+
+      if (!chavepessoa || !ip) {
+        throw new Error("Dados de autenticação ausentes.");
       }
+
+      const res = await fetch(`${ip}/saida?chavepessoa=${chavepessoa}`);
+      const lista = await res.json();
+
+      setTransacoes(lista);
+      await AsyncStorage.setItem(CHAVE_HISTORICO, JSON.stringify(lista)); // Atualiza localmente também
+    } catch (e) {
+      console.error("Erro ao buscar saídas:", e);
     }
   };
 
