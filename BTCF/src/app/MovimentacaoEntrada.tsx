@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,52 +13,176 @@ import { Picker } from "@react-native-picker/picker";
 import { useTheme } from "./ThemeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+// --- Definições de Tipo para TypeScript ---
 type Transacao = {
   id: number;
   valor: number;
-  tipo: string;
+  tipo: string; // Tipo de transação (avista, parcelado, etc.)
+  categoria: string; // Categoria da transação
   descricao: string;
   data: string;
 };
 
+// Interface para a categoria retornada do backend
+interface Categoria {
+  chave: number;
+  nome_categoria: string;
+  tipo_transacao: 'entrada' | 'saida';
+  chaveusuario: number;
+}
+
 export default function MovimentacaoEntrada() {
   const { tema } = useTheme();
-  const [valorRaw, setValorRaw] = useState("");
-  const [tipo, setTipo] = useState("avista");
-  const [parcelas, setParcelas] = useState("");
-  const [valorParcela, setValorParcela] = useState("");
-  const [dataTermino, setDataTermino] = useState("");
-  const [data, setData] = useState(new Date().toISOString().slice(0, 10));
-  const [descricao, setDescricao] = useState("");
+  const [valorRaw, setValorRaw] = useState<string>("");
+  const [tipo, setTipo] = useState<string>("avista"); // Tipo de transação (à vista, parcelado, etc.)
+  const [categoria, setCategoria] = useState<string>(""); // Estado para a categoria selecionada (agora dinâmica)
+  const [parcelas, setParcelas] = useState<string>("");
+  const [valorParcela, setValorParcela] = useState<string>("");
+  const [dataTermino, setDataTermino] = useState<string>("");
+  const [data, setData] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [descricao, setDescricao] = useState<string>("");
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [grupos, setGrupos] = useState<any[]>([]);
   const [grupoSelecionado, setGrupoSelecionado] = useState<number | null>(null);
   const CHAVE_HISTORICO = "historico_entradas";
 
-  useEffect(() => {
-    carregarGrupos();
-    carregarHistoricoDoServidor();
+  // Estado para o IP do servidor e ID do usuário (carregados do AsyncStorage)
+  const [ipServidor, setIpServidor] = useState<string | null>(null);
+  const [usuarioId, setUsuarioId] = useState<number | null>(null);
+
+  // Estado para as categorias disponíveis (carregadas do backend)
+  const [categoriasDisponiveis, setCategoriasDisponiveis] = useState<Categoria[]>([]);
+
+  // Função para carregar o IP do servidor e o ID do usuário
+  const loadConfig = useCallback(async () => {
+    try {
+      const storedIp = await AsyncStorage.getItem("ipServidor");
+      if (storedIp) {
+        setIpServidor(storedIp);
+      } else {
+        Alert.alert("Erro", "IP do servidor não configurado. Por favor, configure o IP na tela de configurações.");
+        setLoading(false);
+        return;
+      }
+
+      const savedUsuarioId = await AsyncStorage.getItem("usuarioId");
+      if (savedUsuarioId) {
+        setUsuarioId(parseInt(savedUsuarioId));
+      } else {
+        // Tenta buscar o ID do usuário pelo email se não estiver salvo
+        const userEmail = await AsyncStorage.getItem("usuarioEmail");
+        if (userEmail && storedIp) {
+          const userRes = await fetch(`${storedIp}/usuario/por-email/${userEmail}`);
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            setUsuarioId(userData.chave);
+            await AsyncStorage.setItem("usuarioId", String(userData.chave));
+          } else {
+            Alert.alert("Erro", "Não foi possível obter o ID do usuário. Faça login novamente.");
+          }
+        } else {
+          Alert.alert("Erro", "ID do usuário ou Email não encontrado. Por favor, faça login novamente.");
+        }
+      }
+    } catch (err: any) {
+      console.error("Erro ao carregar configurações:", err.message);
+      Alert.alert("Erro", "Não foi possível obter as configurações iniciais.");
+      setLoading(false);
+    }
   }, []);
 
-const carregarHistoricoDoServidor = async () => {
-  try {
-    const usuarioId = await AsyncStorage.getItem("usuarioId");
-    const ip = await AsyncStorage.getItem("ipServidor");
+  // Carrega configurações iniciais ao montar o componente
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
 
-    if (!usuarioId || !ip) throw new Error("Usuário ou IP não encontrado.");
+  // Função para carregar grupos do backend
+  const carregarGrupos = useCallback(async () => {
+    if (!ipServidor || usuarioId === null) {
+      return;
+    }
+    try {
+      const gruposRes = await fetch(`${ipServidor}/grupo/usuario/${usuarioId}`);
+      if (!gruposRes.ok) throw new Error("Erro ao buscar grupos.");
+      const lista = await gruposRes.json();
+      setGrupos(lista);
 
-    const response = await fetch(`${ip}/entrada?chavepessoa=${usuarioId}`);
-    const dados = await response.json();
+      const grupoSalvo = await AsyncStorage.getItem("grupoSelecionado");
+      const grupoValido = grupoSalvo && lista.some((g: any) => g.chave === parseInt(grupoSalvo));
+      const grupoId = grupoValido ? parseInt(grupoSalvo!) : lista[0]?.chave;
 
-    if (!response.ok) throw new Error(dados.erro || "Erro ao buscar histórico.");
+      if (!grupoId) {
+        Alert.alert("Atenção", "Você ainda não faz parte de nenhum grupo.");
+        return;
+      }
+      setGrupoSelecionado(grupoId);
+    } catch (err: any) {
+      console.error("Erro ao carregar grupos:", err);
+      Alert.alert("Erro ao carregar grupos", err.message || "Erro desconhecido.");
+    }
+  }, [ipServidor, usuarioId]);
 
-    setTransacoes(dados);
-    await salvarHistoricoLocal(dados);
-  } catch (err: any) {
-    console.error("Erro ao carregar histórico do servidor:", err.message);
-  }
-};
+  // Função para carregar categorias do backend
+  const carregarCategorias = useCallback(async () => {
+    if (!ipServidor || usuarioId === null) {
+      return;
+    }
+    try {
+      const response = await fetch(`${ipServidor}/categorias/${usuarioId}/entrada`);
+      const data: Categoria[] = await response.json();
+      if (response.ok) {
+        setCategoriasDisponiveis(data);
+        // Define a primeira categoria como padrão se houver categorias
+        if (data.length > 0) {
+          setCategoria(data[0].nome_categoria);
+        } else {
+          setCategoria(""); // Nenhuma categoria disponível
+        }
+      } else {
+        throw new Error(data.erro || "Erro ao buscar categorias.");
+      }
+    } catch (err: any) {
+      console.error("Erro ao carregar categorias:", err.message);
+      Alert.alert("Erro", "Não foi possível carregar as categorias personalizadas.");
+    }
+  }, [ipServidor, usuarioId]);
+
+  // Carrega grupos e categorias quando IP e usuárioId estão disponíveis
+  useEffect(() => {
+    if (ipServidor && usuarioId !== null) {
+      carregarGrupos();
+      carregarCategorias();
+    }
+  }, [ipServidor, usuarioId, carregarGrupos, carregarCategorias]);
+
+  // Carrega histórico do servidor após IP, usuárioId e grupo serem definidos
+  useEffect(() => {
+    if (ipServidor && usuarioId !== null && grupoSelecionado !== null) {
+      carregarHistoricoDoServidor();
+    }
+  }, [ipServidor, usuarioId, grupoSelecionado]);
+
+  const carregarHistoricoDoServidor = async () => {
+    try {
+      if (!usuarioId || !ipServidor) throw new Error("Usuário ou IP não encontrado.");
+
+      const response = await fetch(`${ipServidor}/entrada?chavepessoa=${usuarioId}`);
+      const dados: Transacao[] = await response.json();
+
+      if (!response.ok) throw new Error(dados.erro || "Erro ao buscar histórico.");
+
+      const dadosComCategoria = dados.map(item => ({
+        ...item,
+        categoria: item.categoria || "Outros" // Define um valor padrão se não existir
+      }));
+      setTransacoes(dadosComCategoria);
+      await salvarHistoricoLocal(dadosComCategoria);
+    } catch (err: any) {
+      console.error("Erro ao carregar histórico do servidor:", err.message);
+      // Não exibe Alert aqui para não ser muito intrusivo no carregamento inicial
+    }
+  };
 
   const salvarHistoricoLocal = async (lista: Transacao[]) => {
     try {
@@ -68,41 +192,10 @@ const carregarHistoricoDoServidor = async () => {
     }
   };
 
-  const carregarGrupos = async () => {
-    try {
-      const email = await AsyncStorage.getItem("usuarioEmail");
-      const ip = await AsyncStorage.getItem("ipServidor");
-      if (!email || !ip) throw new Error("Dados de autenticação ausentes.");
-
-      const usuarioRes = await fetch(`${ip}/usuario/por-email/${email}`);
-      const usuario = await usuarioRes.json();
-
-      await AsyncStorage.setItem("usuarioId", String(usuario.chave));
-
-      const gruposRes = await fetch(`${ip}/grupo/usuario/${usuario.chave}`);
-      const lista = await gruposRes.json();
-      setGrupos(lista);
-
-      const grupoSalvo = await AsyncStorage.getItem("grupoSelecionado");
-      const grupoValido = grupoSalvo && lista.some(g => g.chave === parseInt(grupoSalvo));
-      const grupoId = grupoValido ? parseInt(grupoSalvo!) : lista[0]?.chave;
-
-      if (!grupoId) {
-        Alert.alert("Atenção", "Você ainda não faz parte de nenhum grupo.");
-        return;
-      }
-
-      setGrupoSelecionado(grupoId);
-    } catch (err: any) {
-      console.error("Erro ao carregar grupos:", err);
-      Alert.alert("Erro ao carregar grupos", err.message || "Erro desconhecido.");
-    }
-  };
-
   useEffect(() => {
     if (tipo === "parcelado" && valorRaw && parcelas) {
       const qtd = parseInt(parcelas);
-      const val = parseFloat(valorRaw) / 100;
+      const val = parseFloat(valorRaw.replace(',', '.')) / 100;
       if (!isNaN(qtd) && qtd > 0 && !isNaN(val)) {
         setValorParcela((val / qtd).toFixed(2));
         const fim = new Date(data);
@@ -125,8 +218,8 @@ const carregarHistoricoDoServidor = async () => {
     return valorNumerico.replace(".", ",");
   };
 
-  const gerarDescricaoPadrao = (tipo: string, valorFormatado: string) =>
-    `Ganho ${tipo === "parcelado" ? "parcelado" : "à vista"} de R$ ${valorFormatado}`;
+  const gerarDescricaoPadrao = (tipo: string, categoria: string, valorFormatado: string) =>
+    `Ganho ${categoria} ${tipo === "parcelado" ? "parcelado" : "à vista"} de R$ ${valorFormatado}`;
 
   const handleSalvar = async () => {
     if (!valorRaw || (tipo === "parcelado" && (!parcelas || parseInt(parcelas) <= 0))) {
@@ -137,32 +230,35 @@ const carregarHistoricoDoServidor = async () => {
       Alert.alert("Erro", "Selecione um grupo.");
       return;
     }
+    if (!categoria) {
+      Alert.alert("Erro", "Selecione uma categoria.");
+      return;
+    }
 
     try {
       setLoading(true);
-      const usuarioId = await AsyncStorage.getItem("usuarioId");
-      const ip = await AsyncStorage.getItem("ipServidor");
-      if (!usuarioId || !ip) throw new Error("Dados incompletos.");
+      if (!usuarioId || !ipServidor) throw new Error("Dados incompletos (usuário ou IP do servidor).");
 
-      const valorNumerico = parseFloat(valorRaw) / 100;
-      const valorParcelaNumerico = valorParcela ? parseFloat(valorParcela) : valorNumerico;
+      const valorNumerico = parseFloat(valorRaw.replace(',', '.')) / 100;
+      const valorParcelaNumerico = valorParcela ? parseFloat(valorParcela.replace(',', '.')) : valorNumerico;
       const dataFimParcelas = tipo === "parcelado" ? dataTermino : data;
       const valorFormatado = formatarComoMoeda(valorRaw);
 
       const body = {
         tipo,
+        categoria,
         valor: valorNumerico,
-        descricao: descricao.trim() || gerarDescricaoPadrao(tipo, valorFormatado),
+        descricao: descricao.trim() || gerarDescricaoPadrao(tipo, categoria, valorFormatado),
         qtdeparc: tipo === "parcelado" ? parseInt(parcelas) : 1,
         valorparc: valorParcelaNumerico,
         datafimparc: dataFimParcelas,
-        chavepessoa: parseInt(usuarioId),
+        chavepessoa: usuarioId,
         chavegrupo: grupoSelecionado,
       };
 
       console.log("📤 Enviando dados para API /entrada:", body);
 
-      const response = await fetch(`${ip}/entrada`, {
+      const response = await fetch(`${ipServidor}/entrada`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -179,6 +275,7 @@ const carregarHistoricoDoServidor = async () => {
         id: resposta.chave,
         valor: resposta.valor,
         tipo: resposta.tipo,
+        categoria: resposta.categoria,
         descricao: resposta.descricao,
         data: resposta.datacad,
       };
@@ -189,8 +286,10 @@ const carregarHistoricoDoServidor = async () => {
       setTransacoes(novaLista);
       await salvarHistoricoLocal(novaLista);
 
+      // Limpar formulário
       setValorRaw("");
       setTipo("avista");
+      setCategoria(categoriasDisponiveis.length > 0 ? categoriasDisponiveis[0].nome_categoria : ""); // Resetar para a primeira categoria disponível
       setParcelas("");
       setValorParcela("");
       setDataTermino("");
@@ -215,6 +314,7 @@ const carregarHistoricoDoServidor = async () => {
         📅 {new Date(item.data).toLocaleDateString("pt-BR")}
       </Text>
       <Text style={[styles.cardInfo, { color: tema.textColor }]}>Tipo: {item.tipo}</Text>
+      <Text style={[styles.cardInfo, { color: tema.textColor }]}>Categoria: {item.categoria}</Text>
     </View>
   );
 
@@ -238,18 +338,23 @@ const carregarHistoricoDoServidor = async () => {
         <View style={[styles.pickerContainer, { borderColor: tema.inputBorderColor }]}>
           <Picker
             selectedValue={grupoSelecionado}
-            onValueChange={setGrupoSelecionado}
-            style={{ color: "#000" }}
+            onValueChange={(itemValue) => setGrupoSelecionado(itemValue)}
+            style={{ color: tema.textColor }}
           >
-            {grupos.map((grupo) => (
-              <Picker.Item key={grupo.chave} label={grupo.nome} value={grupo.chave} />
-            ))}
+            {grupos.length > 0 ? (
+              grupos.map((grupo) => (
+                <Picker.Item key={grupo.chave} label={grupo.nome} value={grupo.chave} />
+              ))
+            ) : (
+              <Picker.Item label="Nenhum grupo disponível" value={null} />
+            )}
           </Picker>
         </View>
 
         <TouchableOpacity
           onPress={carregarGrupos}
           style={[styles.botao, { backgroundColor: "#2196F3", marginTop: 10 }]}
+          disabled={!ipServidor || usuarioId === null}
         >
           <Text style={styles.botaoTexto}>🔄 Atualizar Grupos</Text>
         </TouchableOpacity>
@@ -284,7 +389,7 @@ const carregarHistoricoDoServidor = async () => {
           borderColor: tema.inputBorderColor,
           backgroundColor: tema.sectionBoxBackground,
         }]}>
-          <Picker selectedValue={tipo} onValueChange={setTipo} style={{ color: "#000" }}>
+          <Picker selectedValue={tipo} onValueChange={(itemValue) => setTipo(itemValue)} style={{ color: tema.textColor }}>
             <Picker.Item label="À Vista" value="avista" />
             <Picker.Item label="Débito" value="debito" />
             <Picker.Item label="Crédito" value="credito" />
@@ -292,9 +397,31 @@ const carregarHistoricoDoServidor = async () => {
           </Picker>
         </View>
 
+        {/* --- CAMPO: CATEGORIA (AGORA DINÂMICO) --- */}
+        <Text style={[styles.label, { color: tema.textColor }]}>Categoria</Text>
+        <View style={[styles.pickerContainer, {
+          borderColor: tema.inputBorderColor,
+          backgroundColor: tema.sectionBoxBackground,
+        }]}>
+          <Picker
+            selectedValue={categoria}
+            onValueChange={(itemValue) => setCategoria(itemValue)}
+            style={{ color: tema.textColor }}
+          >
+            {categoriasDisponiveis.length > 0 ? (
+              categoriasDisponiveis.map((cat) => (
+                <Picker.Item key={cat.chave} label={cat.nome_categoria} value={cat.nome_categoria} />
+              ))
+            ) : (
+              <Picker.Item label="Nenhuma categoria disponível" value="" />
+            )}
+          </Picker>
+        </View>
+        {/* --- FIM CAMPO CATEGORIA --- */}
+
         {tipo === "parcelado" && (
           <>
-            <Text style={[styles.label, { color: tema.textColor }]}>Parcelas *</Text>
+            <Text style={[styles.label, { color: tema.textColor }]}>Parcelas</Text>
             <TextInput
               style={[styles.input, {
                 borderColor: tema.inputBorderColor,
@@ -332,9 +459,9 @@ const carregarHistoricoDoServidor = async () => {
         />
 
         <TouchableOpacity
-          style={[styles.botao, (!valorRaw || loading) && { backgroundColor: tema.itemColor }]}
+          style={[styles.botao, (!valorRaw || loading || !ipServidor || grupoSelecionado === null || !categoria) && { backgroundColor: tema.itemColor }]}
           onPress={handleSalvar}
-          disabled={!valorRaw || loading}
+          disabled={!valorRaw || loading || !ipServidor || grupoSelecionado === null || !categoria}
         >
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.botaoTexto}>Salvar Entrada</Text>}
         </TouchableOpacity>
@@ -346,7 +473,7 @@ const carregarHistoricoDoServidor = async () => {
 const styles = StyleSheet.create({
   label: { fontSize: 16, fontWeight: "bold", marginTop: 16, marginBottom: 4 },
   input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, marginBottom: 8 },
-  pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 8 },
+  pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 8, overflow: 'hidden' },
   botao: { marginTop: 20, backgroundColor: "#4CAF50", paddingVertical: 12, borderRadius: 8, alignItems: "center" },
   botaoTexto: { fontSize: 16, fontWeight: "bold", color: "#fff" },
   card: { padding: 16, borderRadius: 8, marginVertical: 8, elevation: 3 },
