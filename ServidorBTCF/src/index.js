@@ -44,6 +44,23 @@ app.get('/grafico/gastos/:grupoId/:anoMes', async (req, res) => {
   }
 });
 
+app.get('/grafico/despesas-por-categoria/:grupoId/:anoMes', async (req, res) => {
+    const { grupoId, anoMes } = req.params;
+    try {
+        const result = await pool.query(
+            `SELECT categoria, SUM(valor) AS total
+            FROM saida
+            WHERE to_char(datacad, 'YYYY-MM') = $1
+              AND chavegrupo = $2
+            GROUP BY categoria`, // Assumindo que 'saida' tem uma coluna 'categoria'
+            [anoMes, grupoId]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ erro: 'Erro ao buscar despesas por categoria', detalhes: err.message });
+    }
+});
+
 // ===== HISTÓRICO DE TRANSAÇÕES DO GRUPO =====
 app.get('/transacoes/:grupoId/:anoMes', async (req, res) => {
   const { grupoId, anoMes } = req.params;
