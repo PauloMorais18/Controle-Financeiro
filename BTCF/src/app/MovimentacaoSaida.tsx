@@ -12,11 +12,12 @@ import {
 import { Picker } from "@react-native-picker/picker";
 import { useTheme } from "./ThemeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Feather } from '@expo/vector-icons'; // Importa ícones de olho aberto e fechado
 
 // --- Definições de Tipo para TypeScript ---
 type Transacao = {
   id: number;
-  valor: number;
+  valor: number; // Mantemos como number, mas garantiremos que seja um number no runtime
   tipo: string; // Tipo de transação (avista, parcelado, etc.)
   categoria: string; // Nova categoria adicionada aqui
   descricao: string;
@@ -31,7 +32,7 @@ interface Categoria {
   chaveusuario: number;
 }
 
-// Lista de categorias padrão para saídas
+// Lista de categorias padrão para saídas (mantida para fallback se não houver categorias do backend)
 const CATEGORIAS_SAIDA = [
   "Alimentação",
   "Transporte",
@@ -68,6 +69,32 @@ export default function MovimentacaoSaida() {
 
   // Estado para as categorias de saída disponíveis (carregadas do backend)
   const [categoriasDisponiveis, setCategoriasDisponiveis] = useState<Categoria[]>([]);
+
+  // Novo estado para controlar a visibilidade dos valores
+  const [showValues, setShowValues] = useState(true);
+
+  // Função para formatar valores monetários (com ou sem asteriscos)
+  const formatCurrency = useCallback((value: any): string => { // Aceita 'any' para ser mais flexível com o tipo de entrada
+    let numericValue: number;
+
+    if (typeof value === 'string') {
+      numericValue = parseFloat(value.replace(',', '.'));
+    } else if (typeof value === 'number') {
+      numericValue = value;
+    } else {
+      numericValue = 0; // Define como 0 para null, undefined ou outros tipos inesperados
+    }
+
+    if (isNaN(numericValue) || !Number.isFinite(numericValue)) {
+      numericValue = 0; // Garante que seja um número finito válido
+    }
+
+    if (!showValues) {
+      return "R$ *****";
+    }
+
+    return `R$ ${numericValue.toFixed(2).replace('.', ',')}`;
+  }, [showValues]);
 
   // Função para carregar o IP do servidor e o ID do usuário
   const loadConfig = useCallback(async () => {
@@ -186,14 +213,17 @@ export default function MovimentacaoSaida() {
       }
 
       const res = await fetch(`${ipServidor}/saida?chavepessoa=${chavepessoa}`);
-      const lista: Transacao[] = await res.json();
+      const lista: any[] = await res.json(); // Use any[] para flexibilidade na resposta da API
 
       if (!res.ok) throw new Error(lista.erro || "Erro ao buscar histórico.");
 
-      // Garante que a categoria exista, mesmo que o backend não a retorne ainda
-      const dadosComCategoria = lista.map(item => ({
-        ...item,
-        categoria: item.categoria || "Outros" // Define um valor padrão se não existir
+      const dadosComCategoria: Transacao[] = lista.map(item => ({
+        id: item.id || item.chave,
+        valor: typeof item.valor === 'number' ? item.valor : parseFloat(String(item.valor || '0').replace(',', '.')),
+        tipo: item.tipo || '',
+        categoria: item.categoria || "Outros",
+        descricao: item.descricao || '',
+        data: item.data || item.datacad || new Date().toISOString().slice(0, 10),
       }));
       setTransacoes(dadosComCategoria);
       await salvarHistoricoLocal(dadosComCategoria);
@@ -326,7 +356,7 @@ export default function MovimentacaoSaida() {
   const renderItem = (item: Transacao) => (
     <View key={item.id} style={[styles.card, { backgroundColor: tema.sectionBoxBackground }]}>
       <Text style={[styles.cardValor, { color: "#e53935" }]}>
-        🔻 {item.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+        🔻 {formatCurrency(item.valor)} {/* Aplica formatCurrency aqui */}
       </Text>
       <Text style={[styles.cardInfo, { color: tema.textColor }]}>📝 {item.descricao}</Text>
       <Text style={[styles.cardInfo, { color: tema.textColor }]}>
@@ -431,7 +461,7 @@ export default function MovimentacaoSaida() {
           <TextInput
             style={[styles.input, { backgroundColor: "#e0e0e0", color: tema.textColor }]}
             editable={false}
-            value={valorParcela ? parseFloat(valorParcela).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : ""}
+            value={valorParcela ? formatCurrency(parseFloat(valorParcela)) : ""} // Aplica formatCurrency aqui
           />
           <Text style={[styles.label, { color: tema.textColor }]}>Fim do Parcelamento</Text>
           <TextInput
@@ -461,9 +491,24 @@ export default function MovimentacaoSaida() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: tema.backgroundColor }}>
+      <View style={styles.headerContainer}> {/* Novo container para o cabeçalho */}
+        <Text style={[styles.headerTitle, { color: tema.textColor }]}>Movimentação de Saída</Text>
+        {/* Botão para esconder/mostrar valores */}
+        <TouchableOpacity onPress={() => setShowValues(!showValues)} style={styles.toggleVisibilityButton}>
+          {showValues ? (
+            <Feather name="eye" size={24} color={tema.textColor} />
+          ) : (
+            <Feather name="eye-off" size={24} color={tema.textColor} />
+          )}
+        </TouchableOpacity>
+      </View>
       <View style={{ padding: 24, paddingBottom: 100 }}>
         {renderFormulario()}
-        {transacoes.map(renderItem)}
+        {transacoes.map((item, index) => (
+          <View key={item.id || index} style={{ marginTop: 16 }}>
+            {renderItem(item)}
+          </View>
+        ))}
       </View>
     </ScrollView>
   );
@@ -479,7 +524,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 8,
   },
-  pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 8, overflow: 'hidden' }, // Adicionado overflow: 'hidden' para Picker
+  pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 8, overflow: 'hidden' },
   botao: {
     marginTop: 20,
     backgroundColor: "#e53935",
@@ -491,4 +536,18 @@ const styles = StyleSheet.create({
   card: { padding: 16, borderRadius: 8, marginVertical: 8, elevation: 3 },
   cardValor: { fontSize: 18, fontWeight: "bold" },
   cardInfo: { fontSize: 14, marginTop: 4 },
+  headerContainer: { // Novo estilo para o container do cabeçalho
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 24,
+    paddingBottom: 0, // Ajuste conforme necessário
+  },
+  headerTitle: { // Estilo para o título da tela
+    fontSize: 22,
+    fontWeight: "bold",
+  },
+  toggleVisibilityButton: { // Estilo para o botão de visibilidade
+    padding: 5,
+  },
 });

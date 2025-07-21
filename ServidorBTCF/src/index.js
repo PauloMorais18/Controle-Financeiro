@@ -97,12 +97,11 @@ app.get('/entrada', async (req, res) => {
 
     try {
         const result = await pool.query(
-            'SELECT *, categoria FROM entrada WHERE chavepessoa = $1 ORDER BY chave DESC',
-            [chavepessoa]
-        );
+            'SELECT *, categoria FROM entrada WHERE chavepessoa = $1 ORDER BY chave DESC'
+        , [chavepessoa]);
         res.json(result.rows);
     } catch (err) {
-        console.error("Erro ao buscar entradas:", err); // Adicionado log de erro
+        console.error("Erro ao buscar entradas:", err);
         res.status(500).json({ erro: err.message });
     }
 });
@@ -171,12 +170,11 @@ app.get('/saida', async (req, res) => {
 
     try {
         const result = await pool.query(
-            'SELECT *, categoria FROM saida WHERE chavepessoa = $1 ORDER BY chave DESC', // Categoria adicionada aqui
-            [chavepessoa]
-        );
+            'SELECT *, categoria FROM saida WHERE chavepessoa = $1 ORDER BY chave DESC'
+        , [chavepessoa]);
         res.json(result.rows);
     } catch (err) {
-        console.error("Erro ao buscar saídas:", err); // Adicionado log de erro
+        console.error("Erro ao buscar saídas:", err);
         res.status(500).json({ erro: err.message });
     }
 });
@@ -209,15 +207,15 @@ app.post('/saida', async (req, res) => {
 
         const result = await pool.query(
             `INSERT INTO saida
-             (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo, categoria) // Categoria adicionada aqui
+             (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo, categoria)
              VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9)
              RETURNING *`,
-            [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo, categoria] // Categoria como $9
+            [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo, categoria]
         );
 
         res.status(201).json(result.rows[0]);
     } catch (err) {
-        console.error("Erro ao inserir saída:", err); // Adicionado log de erro
+        console.error("Erro ao inserir saída:", err);
         res.status(500).json({ erro: "Erro ao inserir saída", detalhes: err.message });
     }
 });
@@ -232,7 +230,7 @@ app.post('/usuario', async (req, res) => {
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
-        console.error("Erro ao criar usuário:", err); // Adicionado log de erro
+        console.error("Erro ao criar usuário:", err);
         res.status(500).json({ erro: err.message });
     }
 });
@@ -246,7 +244,7 @@ app.post('/usuario/login', async (req, res) => {
         }
         res.json(result.rows[0]);
     } catch (err) {
-        console.error("Erro no login do usuário:", err); // Adicionado log de erro
+        console.error("Erro no login do usuário:", err);
         res.status(500).json({ erro: err.message });
     }
 });
@@ -263,7 +261,7 @@ app.get('/usuario/por-email/:email', async (req, res) => {
         }
         res.json(result.rows[0]);
     } catch (err) {
-        console.error("Erro ao buscar usuário por email:", err); // Adicionado log de erro
+        console.error("Erro ao buscar usuário por email:", err);
         res.status(500).json({ erro: err.message });
     }
 });
@@ -304,7 +302,7 @@ app.put('/usuario/:id', async (req, res) => {
 
         res.json(result.rows[0]);
     } catch (err) {
-        console.error("Erro ao atualizar usuário:", err); // Adicionado log de erro
+        console.error("Erro ao atualizar usuário:", err);
         res.status(500).json({ erro: "Erro ao atualizar usuário", detalhes: err.message });
     }
 });
@@ -436,7 +434,7 @@ app.get('/grupo/usuario/:usuarioId', async (req, res) => {
         );
         res.json(result.rows);
     } catch (err) {
-        console.error("Erro ao buscar grupos do usuário:", err); // Adicionado log de erro
+        console.error("Erro ao buscar grupos do usuário:", err);
         res.status(500).json({ erro: err.message });
     }
 });
@@ -460,7 +458,7 @@ app.post('/grupo', async (req, res) => {
 
         res.status(201).json(grupoCriado);
     } catch (err) {
-        console.error("Erro ao criar grupo:", err); // Adicionado log de erro
+        console.error("Erro ao criar grupo:", err);
         res.status(500).json({ erro: err.message });
     }
 });
@@ -495,7 +493,7 @@ app.post('/grupo/adicionar-pessoa', async (req, res) => {
 
         res.status(201).json({ mensagem: "Usuário adicionado ao grupo com sucesso!" });
     } catch (err) {
-        console.error("Erro ao adicionar pessoa ao grupo:", err); // Adicionado log de erro
+        console.error("Erro ao adicionar pessoa ao grupo:", err);
         res.status(500).json({ erro: err.message });
     }
 });
@@ -513,7 +511,6 @@ app.get('/grupo/:grupoId/membros', async (req, res) => {
         );
         res.status(200).json(result.rows);
     } catch (err) {
-        console.error("Erro ao listar membros do grupo:", err); // Adicionado log de erro
         res.status(500).json({ erro: err.message });
     }
 });
