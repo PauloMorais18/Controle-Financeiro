@@ -9,29 +9,28 @@ import {
   Pressable,
   ScrollView,
   Alert,
+  ActivityIndicator, // Para indicar carregamento
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useTheme } from "./ThemeContext";
 import { PieChart } from "react-native-chart-kit";
-
-// Importa ícones de olho aberto e fechado do @expo/vector-icons
-import { Feather } from '@expo/vector-icons'; // Certifique-se de ter esta biblioteca instalada
+import { Feather } from '@expo/vector-icons';
 
 const screenWidth = Dimensions.get("window").width;
 
-// Interface para os dados do PieChart, conforme esperado pelo react-native-chart-kit
+// Interface para os dados do PieChart
 interface PieChartDataEntry {
   name: string;
   population: number; // 'population' é o campo que react-native-chart-kit usa para o valor
   color: string;
-  legendFontColor?: string; // Tornar opcional, pois a legenda built-in será personalizada via 'name'
-  legendFontSize?: number; // Tornar opcional
+  legendFontColor?: string;
+  legendFontSize?: number;
 }
 
 export default function Principal() {
   const router = useRouter();
-  const { tema } = useTheme(); // Use useTheme diretamente para acessar o tema
+  const { tema } = useTheme();
 
   const [dataAtual, setDataAtual] = useState(new Date());
   const [modalGrupoVisivel, setModalGrupoVisivel] = useState(false);
@@ -39,29 +38,73 @@ export default function Principal() {
   const [grupos, setGrupos] = useState<any[]>([]);
   const [grupoSelecionado, setGrupoSelecionado] = useState<any>(null);
   const [totais, setTotais] = useState({ entradas: 0, saidas: 0 });
-  const [showValues, setShowValues] = useState(true); // Novo estado para controlar a visibilidade dos valores
+  const [showValues, setShowValues] = useState(true);
+  const [isLoading, setIsLoading] = useState(false); // Novo estado para carregamento
+  const [networkError, setNetworkError] = useState<string | null>(null); // Novo estado para erros de rede
 
   // Função para formatar valores monetários (com ou sem asteriscos)
   const formatCurrency = useCallback((value: number) => {
-    if (!showValues) {
-      return "R$ *****"; // Retorna asteriscos se os valores estiverem escondidos
+    if (typeof value !== 'number' || isNaN(value)) {
+      return "R$ --,--";
     }
-    return `R$ ${value.toFixed(2).replace('.', ',')}`; // Formata normalmente
-  }, [showValues]); // Depende de showValues
+    if (!showValues) {
+      return "R$ *****";
+    }
+    return `R$ ${value.toFixed(2).replace('.', ',')}`;
+  }, [showValues]);
 
-  // carregarTotais agora é definida antes de ser usada nos useEffects
+  // Função para buscar grupos do usuário
+  const fetchGrupos = useCallback(async (ip: string, userId: number) => {
+    setNetworkError(null);
+    try {
+      const response = await fetch(`${ip}/grupo/usuario/${userId}`);
+      if (!response.ok) {
+        throw new Error(`Erro ao buscar grupos: ${response.statusText || response.status}`);
+      }
+      const data = await response.json();
+      setGrupos(data);
+      const grupoSalvo = await AsyncStorage.getItem("grupoSelecionado");
+      const grupoAtual = grupoSalvo ? data.find((g: any) => g.chave === parseInt(grupoSalvo)) : null;
+      if (grupoAtual || data[0]) {
+        setGrupoSelecionado(grupoAtual || data[0]);
+      } else {
+        setGrupoSelecionado(null);
+      }
+    } catch (error: any) {
+      console.error("Erro em fetchGrupos:", error);
+      setNetworkError(`Não foi possível conectar ao servidor. Verifique o IP e a conexão. Detalhes: ${error.message}`);
+      Alert.alert("Erro de Conexão", `Não foi possível carregar os grupos. Verifique se o servidor está rodando e o IP está correto. Detalhes: ${error.message}`);
+    }
+  }, []);
+
+  // Função para carregar totais de entradas e saídas
   const carregarTotais = useCallback(async () => {
+    if (!grupoSelecionado?.chave || !dataAtual) {
+      setTotais({ entradas: 0, saidas: 0 });
+      return;
+    }
+
+    setIsLoading(true);
+    setNetworkError(null);
     try {
       const ip = await AsyncStorage.getItem("ipServidor");
-      if (!ip || !grupoSelecionado?.chave) return;
+      if (!ip) {
+        setNetworkError("IP do servidor não configurado. Por favor, configure-o nas configurações.");
+        Alert.alert("Erro de Configuração", "IP do servidor não configurado. Por favor, configure-o nas configurações.");
+        return;
+      }
 
       const anoMes = dataAtual.toISOString().slice(0, 7);
       const url = `${ip}/grafico/gastos/${grupoSelecionado.chave}/${anoMes}`;
 
+      console.log(`Buscando totais para Grupo: ${grupoSelecionado.chave}, Mês/Ano: ${anoMes}`);
       const res = await fetch(url);
-      if (!res.ok) throw new Error("Erro ao buscar totais.");
+      if (!res.ok) {
+        throw new Error(`Erro ao buscar totais: ${res.statusText || res.status}`);
+      }
 
       const data = await res.json();
+      console.log("Dados de totais (entradas/saídas):", data);
 
       let entradas = 0, saidas = 0;
       for (const item of data) {
@@ -69,76 +112,55 @@ export default function Principal() {
         if (item.tipo === "entrada") entradas += valor;
         if (item.tipo === "saida") saidas += valor;
       }
-
       setTotais({ entradas, saidas });
     } catch (err: any) {
-      Alert.alert("Erro ao carregar totais", err.message);
+      console.error("Erro ao carregar totais:", err);
+      setNetworkError(`Não foi possível carregar os totais. Verifique o IP e a conexão. Detalhes: ${err.message}`);
+      Alert.alert("Erro de Conexão", `Não foi possível carregar os totais. Verifique se o servidor está rodando e o IP está correto. Detalhes: ${err.message}`);
+    } finally {
+      setIsLoading(false);
     }
-  }, [grupoSelecionado, dataAtual]); // Dependências para useCallback
+  }, [grupoSelecionado, dataAtual]);
 
   useFocusEffect(
     useCallback(() => {
-      // carregarGruposESelecionar agora também carrega os totais após selecionar o grupo
       async function loadInitialData() {
+        setIsLoading(true);
+        setNetworkError(null);
         try {
           const [email, ip] = await Promise.all([
             AsyncStorage.getItem("usuarioEmail"),
             AsyncStorage.getItem("ipServidor"),
           ]);
-          if (!email || !ip) throw new Error("Dados de autenticação ausentes.");
-
-          const usuarioRes = await fetch(`${ip}/usuario/por-email/${email}`);
-          if (!usuarioRes.ok) throw Error("Usuário não encontrado.");
-          const usuario = await usuarioRes.json();
-
-          const gruposRes = await fetch(`${ip}/grupo/usuario/${usuario.chave}`);
-          if (!gruposRes.ok) throw Error("Erro ao buscar grupos.");
-          const gruposData = await gruposRes.json();
-
-          setGrupos(gruposData);
-          const grupoSalvo = await AsyncStorage.getItem("grupoSelecionado");
-          const grupoAtual = grupoSalvo ? gruposData.find((g: any) => g.chave === parseInt(grupoSalvo)) : null;
-          
-          // Define o grupo selecionado e, se for um novo grupo, carrega os totais
-          if (grupoAtual || gruposData[0]) {
-            const selectedGroup = grupoAtual || gruposData[0];
-            setGrupoSelecionado(selectedGroup);
-            // Chama carregarTotais explicitamente aqui para o carregamento inicial
-            // pois o useEffect abaixo só reagiria a mudanças subsequentes
-            if (selectedGroup) {
-                // Passa o grupo selecionado e a data atual para a função carregarTotais
-                // para garantir que ela tenha os valores mais recentes
-                const anoMes = dataAtual.toISOString().slice(0, 7);
-                const url = `${ip}/grafico/gastos/${selectedGroup.chave}/${anoMes}`;
-                const res = await fetch(url);
-                if (!res.ok) throw Error("Erro ao buscar totais iniciais.");
-                const data = await res.json();
-                let entradas = 0, saidas = 0;
-                for (const item of data) {
-                    const valor = Number(item.total);
-                    if (item.tipo === "entrada") entradas += valor;
-                    if (item.tipo === "saida") saidas += valor;
-                }
-                setTotais({ entradas, saidas });
-            }
-          } else {
-              setGrupoSelecionado(null);
+          if (!email || !ip) {
+            Alert.alert("Erro", "Dados de autenticação ausentes. Por favor, faça login novamente.");
+            router.replace('/login');
+            return;
           }
 
+          const usuarioRes = await fetch(`${ip}/usuario/por-email/${email}`);
+          if (!usuarioRes.ok) throw new Error("Usuário não encontrado.");
+          const usuario = await usuarioRes.json();
+          
+          await fetchGrupos(ip, usuario.chave);
+          
         } catch (err: any) {
-          Alert.alert("Erro", err.message);
+          console.error("Erro em loadInitialData:", err);
+          setNetworkError(`Erro ao iniciar o aplicativo. Verifique o IP e a conexão. Detalhes: ${err.message}`);
+          Alert.alert("Erro de Inicialização", `Não foi possível carregar os dados iniciais. Verifique se o servidor está rodando e o IP está correto. Detalhes: ${err.message}`);
+        } finally {
+          setIsLoading(false);
         }
       }
       loadInitialData();
-    }, [dataAtual]) // Adicionado dataAtual como dependência para loadInitialData
+    }, [fetchGrupos, router])
   );
 
-  // Carrega totais quando o grupo ou data mudam (para mudanças subsequentes)
   useEffect(() => {
     if (grupoSelecionado) {
       carregarTotais();
     }
-  }, [grupoSelecionado, dataAtual, carregarTotais]); // Adicionado carregarTotais como dependência
+  }, [grupoSelecionado, dataAtual, carregarTotais]);
 
   // Intervalo para recarregar totais (a cada 60 segundos)
   useEffect(() => {
@@ -159,24 +181,22 @@ export default function Principal() {
   }
 
   const saldo = totais.entradas - totais.saidas;
-  const status = saldo >= 0 ? "Positivo" : "Negativo";
-
-  // Calcula o total geral para as porcentagens
-  const totalGeral = totais.entradas + totais.saidas;
+  // Removido o status "Positivo" / "Negativo"
+  // const status = saldo >= 0 ? "Positivo" : "Negativo";
 
   // Dados para o PieChart.
-  // A propriedade 'name' será usada para a legenda built-in.
-  // Ela conterá apenas a porcentagem.
+  // Ajustado para mostrar Entradas e Saídas com porcentagens corretas e legenda clara.
+  const totalGeral = totais.entradas + totais.saidas;
   const pieChartData: PieChartDataEntry[] = [
     {
-      name: `${totalGeral > 0 ? (totais.entradas / totalGeral * 100).toFixed(0) : 0}%`, // Apenas porcentagem para a legenda
+      name: `Entradas ${totalGeral > 0 ? (totais.entradas / totalGeral * 100).toFixed(0) : 0}%`, // Removido parênteses extras
       population: totais.entradas,
       color: "green",
       legendFontColor: tema.textColor,
       legendFontSize: 14
     },
     {
-      name: `${totalGeral > 0 ? (totais.saidas / totalGeral * 100).toFixed(0) : 0}%`, // Apenas porcentagem para a legenda
+      name: `Saídas ${totalGeral > 0 ? (totais.saidas / totalGeral * 100).toFixed(0) : 0}%`, // Removido parênteses extras
       population: totais.saidas,
       color: "red",
       legendFontColor: tema.textColor,
@@ -184,28 +204,67 @@ export default function Principal() {
     },
   ];
 
+  // Configuração do gráfico para react-native-chart-kit
+  const chartConfig = {
+    backgroundColor: tema.sectionBoxBackground,
+    backgroundGradientFrom: tema.sectionBoxBackground,
+    backgroundGradientTo: tema.sectionBoxBackground,
+    decimalPlaces: 2,
+    color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+    labelColor: (opacity = 1) => tema.textColor,
+    propsForLabels: {
+      fill: tema.textColor,
+    },
+    propsForBackgroundLines: {
+      strokeDasharray: "",
+      stroke: tema.inputBorderColor,
+    },
+    fillShadowGradient: tema.linkColor,
+    fillShadowGradientOpacity: 0.5,
+  };
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
+      {isLoading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={tema.linkColor} />
+          <Text style={[styles.loadingText, { color: tema.textColor }]}>Carregando dados...</Text>
+        </View>
+      )}
+
+      {networkError && (
+        <View style={[styles.errorContainer, { backgroundColor: tema.sectionBoxBackground }]}>
+          <Text style={[styles.errorText, { color: 'red' }]}>{networkError}</Text>
+          <Text style={[styles.errorHint, { color: tema.textColor }]}>
+            Verifique se o seu servidor backend está rodando e se o IP configurado no aplicativo está correto.
+            Para emuladores Android, o IP geralmente é `http://10.0.2.2:3000`. Para iOS, `http://localhost:3000`.
+          </Text>
+        </View>
+      )}
+
+      <Text style={[styles.title, { color: tema.textColor }]}>Principal</Text>
+
+      {/* Seção de Filtros */}
       <View style={styles.filtrosRow}>
-        <TouchableOpacity onPress={() => setModalGrupoVisivel(true)} style={styles.filtroBotao}>
+        <TouchableOpacity onPress={() => setModalGrupoVisivel(true)} style={[styles.filtroBotao, { borderColor: tema.inputBorderColor }]}>
           <Text style={[styles.filtroTexto, { color: tema.textColor }]}>
             👥 {grupoSelecionado?.nome || "Grupo"}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setModalDataVisivel(true)} style={styles.filtroBotao}>
+        <TouchableOpacity onPress={() => setModalDataVisivel(true)} style={[styles.filtroBotao, { borderColor: tema.inputBorderColor }]}>
           <Text style={[styles.filtroTexto, { color: tema.textColor }]}>
             📅 {formatarMes(dataAtual)}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={carregarTotais} style={[styles.filtroBotao, { backgroundColor: "#e0e0e0" }]}>
-          <Text style={[styles.filtroTexto, { color: tema.textColor }]}>🔄 Atualizar</Text>
+        <TouchableOpacity onPress={carregarTotais} style={[styles.filtroBotao, { backgroundColor: tema.buttonBackground, borderColor: tema.buttonBackground }]}>
+          <Text style={[styles.filtroTexto, { color: tema.buttonTextColor }]}>🔄 Atualizar</Text>
         </TouchableOpacity>
       </View>
 
+      {/* Seção de Resumo Financeiro */}
       <View style={[styles.cardTotais, { backgroundColor: tema.sectionBoxBackground }]}>
         <View style={styles.saldoHeader}>
           <Text style={[styles.valorTotal, { color: tema.textColor }]}>Saldo Total</Text>
-          {/* Botão para esconder/mostrar valores com ícones */}
           <TouchableOpacity onPress={() => setShowValues(!showValues)} style={styles.toggleVisibilityButton}>
             {showValues ? (
               <Feather name="eye" size={24} color={tema.textColor} />
@@ -215,7 +274,7 @@ export default function Principal() {
           </TouchableOpacity>
         </View>
         <Text style={[styles.valorSaldo, { color: tema.textColor }]}>
-          {formatCurrency(saldo)} ({status})
+          {formatCurrency(saldo)}
         </Text>
         <View style={styles.totaisBox}>
           <Text style={{ color: "green" }}>Entradas: {formatCurrency(totais.entradas)}</Text>
@@ -223,49 +282,26 @@ export default function Principal() {
         </View>
       </View>
 
+      {/* Seção de Resumo Gráfico */}
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>Resumo Gráfico</Text>
-      <PieChart
-        data={pieChartData} // Usa os dados tipados
-        width={screenWidth - 32}
-        height={220}
-        chartConfig={{
-          backgroundColor: tema.sectionBoxBackground,
-          backgroundGradientFrom: tema.sectionBoxBackground,
-          backgroundGradientTo: tema.sectionBoxBackground,
-          color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`, // Cor padrão para labels do gráfico
-          labelColor: (opacity = 1) => tema.textColor, // Cor dos labels da legenda
-          decimalPlaces: 2, // opcional, para formatar valores
-          propsForLabels: {
-            fill: tema.textColor, // Cor do texto dos labels na pizza (não usado diretamente com absolute=false)
-          },
-        }}
-        accessor="population"
-        backgroundColor="transparent"
-        paddingLeft="15"
-        absolute={false} // Definido como false para não desenhar rótulos nas fatias
-      />
+      <View style={[styles.chartContainer, { backgroundColor: tema.sectionBoxBackground }]}>
+        {totalGeral > 0 ? (
+          <PieChart
+            data={pieChartData}
+            width={screenWidth - 64} // Ajustado para padding do container
+            height={220}
+            chartConfig={chartConfig}
+            accessor="population"
+            backgroundColor="transparent"
+            paddingLeft="15"
+            absolute={false} // Para usar a legenda built-in com porcentagens
+          />
+        ) : (
+          <Text style={[styles.noDataText, { color: tema.textColor }]}>Nenhum dado de transação para este período.</Text>
+        )}
+      </View>
 
-      {/* --- LEGENDA built-in --- */}
-      {/* A legenda built-in é controlada pelas propriedades nos itens de pieChartData.
-          A imagem que você enviou mostra a legenda built-in com "67% Entradas" e "33% Saídas".
-          Isso é o que estamos configurando no 'name' de pieChartData.
-      */}
-      {/* Não há necessidade de uma legenda customizada se a built-in já atende */}
-      {/* <View style={styles.customLegendContainer}>
-        {pieChartData.map((item, index) => {
-          const percentage = totalGeral > 0 ? (item.population / totalGeral * 100).toFixed(0) : 0;
-          return (
-            <View key={index} style={styles.customLegendItem}>
-              <View style={[styles.legendColorBox, { backgroundColor: item.color }]} />
-              <Text style={[styles.legendText, { color: tema.textColor }]}>
-                {percentage}%
-              </Text>
-            </View>
-          );
-        })}
-      </View> */}
-      {/* --- FIM LEGENDA built-in --- */}
-
+      {/* Botões de Ação */}
       <View style={styles.botoesContainer}>
         <TouchableOpacity style={[styles.botaoAcao, { backgroundColor: tema.linkColor }]} onPress={() => router.push("/MovimentacaoEntrada")}>
           <Text style={styles.botaoTexto}>➕ Entrada</Text>
@@ -275,6 +311,7 @@ export default function Principal() {
         </TouchableOpacity>
       </View>
 
+      {/* Modal de Seleção de Grupo */}
       <Modal visible={modalGrupoVisivel} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={[styles.modalBox, { backgroundColor: tema.sectionBoxBackground }]}>
@@ -284,22 +321,26 @@ export default function Principal() {
                 <Text style={[styles.fecharBotao, { color: tema.textColor }]}>✖</Text>
               </TouchableOpacity>
             </View>
-            {grupos.map((grupo) => (
-              <Pressable
-                key={grupo.chave}
-                onPress={() => {
-                  setGrupoSelecionado(grupo);
-                  setModalGrupoVisivel(false);
-                }}
-                style={[styles.modalItem, { borderBottomColor: tema.inputBorderColor }]}
-              >
-                <Text style={{ color: tema.textColor }}>{grupo.nome}</Text>
-              </Pressable>
-            ))}
+            <ScrollView>
+              {grupos.map((grupo) => (
+                <Pressable
+                  key={grupo.chave}
+                  onPress={async () => {
+                    setGrupoSelecionado(grupo);
+                    await AsyncStorage.setItem("grupoSelecionado", String(grupo.chave));
+                    setModalGrupoVisivel(false);
+                  }}
+                  style={[styles.modalItem, { borderBottomColor: tema.inputBorderColor }]}
+                >
+                  <Text style={{ color: tema.textColor }}>{grupo.nome}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
         </View>
       </Modal>
 
+      {/* Modal de Seleção de Data */}
       <Modal visible={modalDataVisivel} transparent animationType="fade">
         <View style={styles.modalContainer}>
           <View style={[styles.modalBox, { backgroundColor: tema.sectionBoxBackground }]}>
@@ -318,6 +359,12 @@ export default function Principal() {
                 <Text style={[styles.mesBotaoTexto, { color: tema.textColor }]}>▶</Text>
               </TouchableOpacity>
             </View>
+            <TouchableOpacity
+              onPress={() => setModalDataVisivel(false)}
+              style={[styles.confirmButton, { backgroundColor: tema.linkColor }]}
+            >
+              <Text style={styles.confirmButtonText}>Confirmar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -327,10 +374,55 @@ export default function Principal() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
-  filtrosRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
-  filtroBotao: { padding: 10, borderRadius: 8, borderWidth: 1, borderColor: "#ccc" },
-  filtroTexto: { fontSize: 14, fontWeight: "500" },
-  cardTotais: { padding: 20, borderRadius: 16, alignItems: "center", marginBottom: 20, elevation: 3 },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+  },
+  errorContainer: {
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: 'red',
+  },
+  errorText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  errorHint: {
+    fontSize: 14,
+  },
+  title: { fontSize: 28, fontWeight: "bold", marginBottom: 20, textAlign: "center" },
+  filtrosRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16, gap: 8 },
+  filtroBotao: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filtroTexto: { fontSize: 14, fontWeight: "500", textAlign: 'center' },
+  cardTotais: {
+    padding: 20,
+    borderRadius: 16,
+    alignItems: "center",
+    marginBottom: 20,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+  },
   saldoHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -338,46 +430,60 @@ const styles = StyleSheet.create({
     width: '100%',
     marginBottom: 10,
   },
-  valorTotal: { fontSize: 16 },
-  valorSaldo: { fontSize: 28, fontWeight: "bold" },
+  valorTotal: { fontSize: 16, flex: 1 },
+  valorSaldo: { fontSize: 28, fontWeight: "bold", marginBottom: 10 },
   totaisBox: { flexDirection: "row", justifyContent: "space-between", width: "100%", marginTop: 10 },
-  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 8, textAlign: "center" },
+  sectionTitle: { fontSize: 20, fontWeight: "bold", marginBottom: 15, marginTop: 20, textAlign: "center" },
+  chartContainer: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+  },
+  noDataText: {
+    textAlign: 'center',
+    paddingVertical: 20,
+    fontSize: 16,
+  },
   botoesContainer: { flexDirection: "row", justifyContent: "space-around", marginTop: 20 },
   botaoAcao: { paddingVertical: 12, paddingHorizontal: 24, borderRadius: 24 },
   botaoTexto: { color: "#fff", fontWeight: "bold", fontSize: 16 },
   modalContainer: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
-  modalBox: { width: "85%", borderRadius: 12, padding: 24, elevation: 5 },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  modalTitulo: { fontSize: 18, fontWeight: "bold" },
-  fecharBotao: { fontSize: 20, fontWeight: "bold" },
-  modalItem: { paddingVertical: 10, borderBottomWidth: 1 },
-  mesSelector: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 10 },
+  modalBox: {
+    width: "85%",
+    borderRadius: 12,
+    padding: 24,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 15 },
+  modalTitulo: { fontSize: 20, fontWeight: "bold" },
+  fecharBotao: { fontSize: 22, fontWeight: "bold" },
+  modalItem: { paddingVertical: 12, borderBottomWidth: 1 },
+  mesSelector: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 10, marginBottom: 20 },
   mesBotao: { paddingHorizontal: 20, paddingVertical: 10 },
   mesBotaoTexto: { fontSize: 24 },
   mesAtual: { fontSize: 18, fontWeight: "bold", marginHorizontal: 10 },
   toggleVisibilityButton: {
     padding: 5,
   },
-  // Estilos para a legenda customizada
-  customLegendContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 20,
-    flexWrap: 'wrap',
-  },
-  customLegendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 10,
-    marginBottom: 10,
-  },
-  legendColorBox: {
-    width: 16,
-    height: 16,
+  confirmButton: {
+    paddingVertical: 12,
     borderRadius: 8,
-    marginRight: 8,
+    alignItems: 'center',
+    marginTop: 10,
   },
-  legendText: {
-    fontSize: 14,
+  confirmButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });

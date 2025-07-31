@@ -16,6 +16,9 @@ const ThemeContext = createContext({
     linkColor: "#1976D2",
     inputBackground: "#fff",
     inputBorderColor: "#ccc",
+    buttonBackground: "#1976D2", // Adicionado
+    buttonTextColor: "#fff",      // Adicionado
+    textSecondaryColor: "#666",   // Adicionado
   },
 });
 
@@ -60,6 +63,9 @@ export const ThemeProvider = ({ children }) => {
       linkColor: "#1976D2",
       inputBackground: "#fff",
       inputBorderColor: "#ccc",
+      buttonBackground: "#1976D2", // Adicionado
+      buttonTextColor: "#fff",      // Adicionado
+      textSecondaryColor: "#666",   // Adicionado
     },
     escuro: {
       backgroundColor: "#1a1a1a",
@@ -70,6 +76,9 @@ export const ThemeProvider = ({ children }) => {
       linkColor: "#42a5f5",
       inputBackground: "#333",
       inputBorderColor: "#555",
+      buttonBackground: "#42a5f5", // Adicionado (ajustado para o tema escuro)
+      buttonTextColor: "#1a1a1a",   // Adicionado (ajustado para o tema escuro)
+      textSecondaryColor: "#aaaaaa", // Adicionado (ajustado para o tema escuro)
     },
   };
 

@@ -17,7 +17,7 @@ import { Feather } from '@expo/vector-icons'; // Importa ícones de olho aberto 
 // --- Definições de Tipo para TypeScript ---
 type Transacao = {
   id: number;
-  valor: number; // Mantemos como number, mas garantiremos que seja um number no runtime
+  valor: number;
   tipo: string; // Tipo de transação (avista, parcelado, etc.)
   categoria: string; // Categoria da transação
   descricao: string;
@@ -34,7 +34,8 @@ interface Categoria {
 
 export default function MovimentacaoEntrada() {
   const { tema } = useTheme();
-  const [valorRaw, setValorRaw] = useState<string>("");
+  const [valorRaw, setValorRaw] = useState<string>(""); // Valor bruto para cálculo
+  const [valorExibicao, setValorExibicao] = useState<string>("0,00"); // Valor formatado para exibição
   const [tipo, setTipo] = useState<string>("avista"); // Tipo de transação (à vista, parcelado, etc.)
   const [categoria, setCategoria] = useState<string>(""); // Estado para a categoria selecionada (agora dinâmica)
   const [parcelas, setParcelas] = useState<string>("");
@@ -59,37 +60,31 @@ export default function MovimentacaoEntrada() {
   const [showValues, setShowValues] = useState(true);
 
   // Função para formatar valores monetários (com ou sem asteriscos)
-  const formatCurrency = useCallback((value: any): string => { // Aceita 'any' para ser mais flexível com o tipo de entrada
-    // Garante que o valor não é null ou undefined antes de qualquer operação
+  const formatCurrency = useCallback((value: any): string => {
     if (value === null || value === undefined) {
       return "R$ 0,00";
     }
 
     let numericValue: number;
 
-    // Tenta converter para número, tratando strings (ex: "1.234,56")
     if (typeof value === 'string') {
       numericValue = parseFloat(value.replace(',', '.'));
     } else if (typeof value === 'number') {
       numericValue = value;
     } else {
-      // Fallback para tipos inesperados, garantindo que numericValue seja um número
       numericValue = 0;
     }
 
-    // Verifica se o valor é NaN após a conversão
     if (isNaN(numericValue)) {
       numericValue = 0;
     }
 
-    // Aplica a lógica de esconder/mostrar valores
     if (!showValues) {
       return "R$ *****";
     }
 
-    // Garante que o valor é um número finito antes de chamar toFixed
     if (!Number.isFinite(numericValue)) {
-        return "R$ 0,00"; // Ou outro valor padrão para casos como Infinity
+        return "R$ 0,00";
     }
 
     return `R$ ${numericValue.toFixed(2).replace('.', ',')}`;
@@ -97,6 +92,7 @@ export default function MovimentacaoEntrada() {
 
   // Função para carregar o IP do servidor e o ID do usuário
   const loadConfig = useCallback(async () => {
+    setLoading(true); // Inicia loading ao carregar configs
     try {
       const storedIp = await AsyncStorage.getItem("ipServidor");
       if (storedIp) {
@@ -107,29 +103,28 @@ export default function MovimentacaoEntrada() {
         return;
       }
 
-      const savedUsuarioId = await AsyncStorage.getItem("usuarioId");
-      if (savedUsuarioId) {
-        setUsuarioId(parseInt(savedUsuarioId));
-      } else {
-        // Tenta buscar o ID do usuário pelo email se não estiver salvo
-        const userEmail = await AsyncStorage.getItem("usuarioEmail");
-        if (userEmail && storedIp) {
-          const userRes = await fetch(`${storedIp}/usuario/por-email/${userEmail}`);
-          if (userRes.ok) {
-            const userData = await userRes.json();
-            setUsuarioId(userData.chave);
-            await AsyncStorage.setItem("usuarioId", String(userData.chave));
-          } else {
-            Alert.alert("Erro", "Não foi possível obter o ID do usuário. Faça login novamente.");
-          }
+      const userEmail = await AsyncStorage.getItem("usuarioEmail");
+      if (userEmail && storedIp) {
+        const userRes = await fetch(`${storedIp}/usuario/por-email/${userEmail}`);
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          setUsuarioId(userData.chave);
+          await AsyncStorage.setItem("usuarioId", String(userData.chave));
         } else {
-          Alert.alert("Erro", "ID do usuário ou Email não encontrado. Por favor, faça login novamente.");
+          Alert.alert("Erro", "Não foi possível obter o ID do usuário. Faça login novamente.");
+          setLoading(false);
+          return;
         }
+      } else {
+        Alert.alert("Erro", "ID do usuário ou Email não encontrado. Por favor, faça login novamente.");
+        setLoading(false);
+        return;
       }
     } catch (err: any) {
       console.error("Erro ao carregar configurações:", err.message);
       Alert.alert("Erro", "Não foi possível obter as configurações iniciais.");
-      setLoading(false);
+    } finally {
+      setLoading(false); // Finaliza loading após carregar configs
     }
   }, []);
 
@@ -170,6 +165,7 @@ export default function MovimentacaoEntrada() {
       return;
     }
     try {
+      // Endpoint para buscar categorias de entrada
       const response = await fetch(`${ipServidor}/categorias/${usuarioId}/entrada`);
       const data: Categoria[] = await response.json();
       if (response.ok) {
@@ -217,7 +213,7 @@ export default function MovimentacaoEntrada() {
         id: item.id || item.chave, // Garante que 'id' exista, pode ser 'chave' do backend
         valor: typeof item.valor === 'number' ? item.valor : parseFloat(item.valor?.replace(',', '.') || '0'), // Garante que valor é number
         tipo: item.tipo || '',
-        categoria: item.categoria || "Outros", // Define um valor padrão se não existir
+        categoria: item.categoria || "Não Definida", // Define um valor padrão se não existir
         descricao: item.descricao || '',
         data: item.data || item.datacad || new Date().toISOString().slice(0, 10), // Garante que data exista
       }));
@@ -240,7 +236,8 @@ export default function MovimentacaoEntrada() {
   useEffect(() => {
     if (tipo === "parcelado" && valorRaw && parcelas) {
       const qtd = parseInt(parcelas);
-      const val = parseFloat(valorRaw.replace(',', '.')) / 100;
+      // Converte valorRaw para número antes de usar
+      const val = parseFloat(valorRaw.replace(',', '.'));
       if (!isNaN(qtd) && qtd > 0 && !isNaN(val)) {
         setValorParcela((val / qtd).toFixed(2));
         const fim = new Date(data);
@@ -256,6 +253,11 @@ export default function MovimentacaoEntrada() {
     }
   }, [tipo, valorRaw, parcelas, data]);
 
+  // Atualiza o valor de exibição quando valorRaw muda
+  useEffect(() => {
+    setValorExibicao(formatarComoMoeda(valorRaw));
+  }, [valorRaw]);
+
   const formatarComoMoeda = (texto: string) => {
     const numeros = texto.replace(/\D/g, "");
     const inteiro = numeros.padStart(3, "0");
@@ -267,8 +269,12 @@ export default function MovimentacaoEntrada() {
     `Ganho ${categoria} ${tipo === "parcelado" ? "parcelado" : "à vista"} de R$ ${valorFormatado}`;
 
   const handleSalvar = async () => {
-    if (!valorRaw || (tipo === "parcelado" && (!parcelas || parseInt(parcelas) <= 0))) {
-      Alert.alert("Erro", "Preencha corretamente os campos obrigatórios.");
+    if (!valorRaw || parseFloat(valorRaw.replace(',', '.')) <= 0) {
+      Alert.alert("Erro", "O valor da entrada deve ser maior que zero.");
+      return;
+    }
+    if (tipo === "parcelado" && (!parcelas || parseInt(parcelas) <= 0)) {
+      Alert.alert("Erro", "Preencha corretamente o número de parcelas.");
       return;
     }
     if (!grupoSelecionado) {
@@ -284,8 +290,8 @@ export default function MovimentacaoEntrada() {
       setLoading(true);
       if (!usuarioId || !ipServidor) throw new Error("Dados incompletos (usuário ou IP do servidor).");
 
-      const valorNumerico = parseFloat(valorRaw.replace(',', '.')) / 100;
-      const valorParcelaNumerico = valorParcela ? parseFloat(valorParcela.replace(',', '.')) : valorNumerico;
+      const valorNumerico = parseFloat(valorRaw.replace(',', '.')); // Valor total
+      const valorParcelaNumerico = tipo === "parcelado" && valorParcela ? parseFloat(valorParcela.replace(',', '.')) : valorNumerico;
       const dataFimParcelas = tipo === "parcelado" ? dataTermino : data;
       const valorFormatado = formatarComoMoeda(valorRaw);
 
@@ -325,7 +331,8 @@ export default function MovimentacaoEntrada() {
         data: resposta.datacad,
       };
 
-      await AsyncStorage.setItem("grupoSelecionado", grupoSelecionado.toString());
+      // Não sobrescreve o grupo selecionado no AsyncStorage, apenas o usa
+      // await AsyncStorage.setItem("grupoSelecionado", grupoSelecionado.toString());
 
       const novaLista = [novaTransacao, ...transacoes];
       setTransacoes(novaLista);
@@ -333,6 +340,7 @@ export default function MovimentacaoEntrada() {
 
       // Limpar formulário
       setValorRaw("");
+      setValorExibicao("0,00");
       setTipo("avista");
       setCategoria(categoriasDisponiveis.length > 0 ? categoriasDisponiveis[0].nome_categoria : ""); // Resetar para a primeira categoria disponível
       setParcelas("");
@@ -350,102 +358,99 @@ export default function MovimentacaoEntrada() {
   };
 
   const renderItem = ({ item }: { item: Transacao }) => (
-    <View style={[styles.card, { backgroundColor: tema.sectionBoxBackground }]}>
-      <Text style={[styles.cardValor, { color: tema.linkColor }]}>
-        💰 {formatCurrency(item.valor)} {/* Aplica formatCurrency aqui */}
+    <View style={[styles.card, { backgroundColor: tema.sectionBoxBackground, borderColor: tema.inputBorderColor }]}>
+      <View style={styles.cardRow}>
+        <Text style={[styles.cardType, { color: tema.textColor }]}>
+          {item.tipo === 'parcelado' ? 'Parcelado' : 'À Vista'}
+        </Text>
+        <Text style={[styles.cardCategory, { color: tema.textColor }]}>
+          {item.categoria}
+        </Text>
+        <Text style={[styles.cardValue, { color: tema.linkColor }]}>
+          {formatCurrency(item.valor)}
+        </Text>
+      </View>
+      <Text style={[styles.cardDescription, { color: tema.textSecondaryColor }]}>
+        {item.descricao}
       </Text>
-      <Text style={[styles.cardInfo, { color: tema.textColor }]}>📝 {item.descricao}</Text>
-      <Text style={[styles.cardInfo, { color: tema.textColor }]}>
-        📅 {new Date(item.data).toLocaleDateString("pt-BR")}
+      <Text style={[styles.cardDate, { color: tema.textSecondaryColor }]}>
+        {new Date(item.data).toLocaleDateString("pt-BR")}
       </Text>
-      <Text style={[styles.cardInfo, { color: tema.textColor }]}>Tipo: {item.tipo}</Text>
-      <Text style={[styles.cardInfo, { color: tema.textColor }]}>Categoria: {item.categoria}</Text>
     </View>
-  );
-
-  return (
-    <ScrollView style={{ flex: 1, backgroundColor: tema.backgroundColor }}>
-      <View style={styles.headerContainer}> {/* Novo container para o cabeçalho */}
-        <Text style={[styles.headerTitle, { color: tema.textColor }]}>Movimentação de Entrada</Text>
-        {/* Botão para esconder/mostrar valores */}
-        <TouchableOpacity onPress={() => setShowValues(!showValues)} style={styles.toggleVisibilityButton}>
-          {showValues ? (
-            <Feather name="eye" size={24} color={tema.textColor} />
-          ) : (
-            <Feather name="eye-off" size={24} color={tema.textColor} />
-          )}
-        </TouchableOpacity>
-      </View>
-      <View style={{ padding: 24, paddingBottom: 100 }}>
-        {renderFormulario()}
-        {transacoes.map((item, index) => (
-          <View key={item.id || index} style={{ marginTop: 16 }}>
-            {renderItem({ item })}
-          </View>
-        ))}
-      </View>
-    </ScrollView>
   );
 
   function renderFormulario() {
     return (
       <>
         <Text style={[styles.label, { color: tema.textColor }]}>Grupo</Text>
-        <View style={[styles.pickerContainer, { borderColor: tema.inputBorderColor }]}>
+        <View style={[styles.pickerContainer, { borderColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground }]}>
           <Picker
             selectedValue={grupoSelecionado}
             onValueChange={(itemValue) => setGrupoSelecionado(itemValue)}
             style={{ color: tema.textColor }}
+            dropdownIconColor={tema.textColor}
           >
             {grupos.length > 0 ? (
               grupos.map((grupo) => (
                 <Picker.Item key={grupo.chave} label={grupo.nome} value={grupo.chave} />
               ))
             ) : (
-              <Picker.Item label="Nenhum grupo disponível" value={null} />
+              <Picker.Item label="Nenhum grupo disponível" value={null} enabled={false} />
             )}
           </Picker>
         </View>
 
         <TouchableOpacity
           onPress={carregarGrupos}
-          style={[styles.botao, { backgroundColor: "#2196F3", marginTop: 10 }]}
+          style={[styles.botaoAtualizar, { backgroundColor: tema.buttonBackground }]}
           disabled={!ipServidor || usuarioId === null}
         >
-          <Text style={styles.botaoTexto}>🔄 Atualizar Grupos</Text>
+          <Text style={[styles.botaoTexto, { color: tema.buttonTextColor }]}>🔄 Atualizar Grupos</Text>
         </TouchableOpacity>
 
         <Text style={[styles.label, { color: tema.textColor }]}>Valor da Entrada (R$)</Text>
         <TextInput
           style={[styles.input, {
             borderColor: tema.inputBorderColor,
-            backgroundColor: tema.sectionBoxBackground,
+            backgroundColor: tema.inputBackground,
             color: tema.textColor,
           }]}
           keyboardType="numeric"
           placeholder="0,00"
-          placeholderTextColor={tema.itemColor}
-          value={formatarComoMoeda(valorRaw)}
-          onChangeText={(text) => setValorRaw(text.replace(/\D/g, ""))}
+          placeholderTextColor={tema.textSecondaryColor}
+          value={valorExibicao} // Exibe o valor formatado
+          onChangeText={(text) => {
+            // Remove tudo que não for número antes de salvar no valorRaw
+            const raw = text.replace(/\D/g, "");
+            setValorRaw(raw);
+            // setValorExibicao(formatarComoMoeda(raw)); // Já é feito no useEffect
+          }}
         />
 
         <Text style={[styles.label, { color: tema.textColor }]}>Data</Text>
         <TextInput
           style={[styles.input, {
             borderColor: tema.inputBorderColor,
-            backgroundColor: tema.sectionBoxBackground,
+            backgroundColor: tema.inputBackground,
             color: tema.textColor,
           }]}
           value={data}
           onChangeText={setData}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={tema.textSecondaryColor}
         />
 
         <Text style={[styles.label, { color: tema.textColor }]}>Tipo da Transação</Text>
         <View style={[styles.pickerContainer, {
           borderColor: tema.inputBorderColor,
-          backgroundColor: tema.sectionBoxBackground,
+          backgroundColor: tema.inputBackground,
         }]}>
-          <Picker selectedValue={tipo} onValueChange={(itemValue) => setTipo(itemValue)} style={{ color: tema.textColor }}>
+          <Picker
+            selectedValue={tipo}
+            onValueChange={(itemValue) => setTipo(itemValue)}
+            style={{ color: tema.textColor }}
+            dropdownIconColor={tema.textColor}
+          >
             <Picker.Item label="À Vista" value="avista" />
             <Picker.Item label="Débito" value="debito" />
             <Picker.Item label="Crédito" value="credito" />
@@ -457,22 +462,30 @@ export default function MovimentacaoEntrada() {
         <Text style={[styles.label, { color: tema.textColor }]}>Categoria</Text>
         <View style={[styles.pickerContainer, {
           borderColor: tema.inputBorderColor,
-          backgroundColor: tema.sectionBoxBackground,
+          backgroundColor: tema.inputBackground,
         }]}>
           <Picker
             selectedValue={categoria}
             onValueChange={(itemValue) => setCategoria(itemValue)}
             style={{ color: tema.textColor }}
+            dropdownIconColor={tema.textColor}
           >
             {categoriasDisponiveis.length > 0 ? (
               categoriasDisponiveis.map((cat) => (
                 <Picker.Item key={cat.chave} label={cat.nome_categoria} value={cat.nome_categoria} />
               ))
             ) : (
-              <Picker.Item label="Nenhuma categoria disponível" value="" />
+              <Picker.Item label="Nenhuma categoria disponível" value="" enabled={false} />
             )}
           </Picker>
         </View>
+        <TouchableOpacity
+          onPress={carregarCategorias}
+          style={[styles.botaoAtualizar, { backgroundColor: tema.buttonBackground }]}
+          disabled={!ipServidor || usuarioId === null}
+        >
+          <Text style={[styles.botaoTexto, { color: tema.buttonTextColor }]}>🔄 Atualizar Categorias</Text>
+        </TouchableOpacity>
         {/* --- FIM CAMPO CATEGORIA --- */}
 
         {tipo === "parcelado" && (
@@ -481,22 +494,24 @@ export default function MovimentacaoEntrada() {
             <TextInput
               style={[styles.input, {
                 borderColor: tema.inputBorderColor,
-                backgroundColor: tema.sectionBoxBackground,
+                backgroundColor: tema.inputBackground,
                 color: tema.textColor,
               }]}
               keyboardType="numeric"
+              placeholder="Número de parcelas"
+              placeholderTextColor={tema.textSecondaryColor}
               value={parcelas}
               onChangeText={setParcelas}
             />
             <Text style={[styles.label, { color: tema.textColor }]}>Valor por Parcela</Text>
             <TextInput
-              style={[styles.input, { backgroundColor: "#e0e0e0", color: tema.textColor }]}
+              style={[styles.input, { backgroundColor: tema.sectionBoxBackground, color: tema.textColor, opacity: 0.7 }]}
               editable={false}
-              value={valorParcela ? formatCurrency(parseFloat(valorParcela)) : ""} // Aplica formatCurrency aqui
+              value={valorParcela ? formatCurrency(parseFloat(valorParcela)) : formatCurrency(0)}
             />
             <Text style={[styles.label, { color: tema.textColor }]}>Fim do Parcelamento</Text>
             <TextInput
-              style={[styles.input, { backgroundColor: "#e0e0e0", color: tema.textColor }]}
+              style={[styles.input, { backgroundColor: tema.sectionBoxBackground, color: tema.textColor, opacity: 0.7 }]}
               editable={false}
               value={dataTermino}
             />
@@ -507,46 +522,176 @@ export default function MovimentacaoEntrada() {
         <TextInput
           style={[styles.input, {
             borderColor: tema.inputBorderColor,
-            backgroundColor: tema.sectionBoxBackground,
+            backgroundColor: tema.inputBackground,
             color: tema.textColor,
           }]}
           value={descricao}
           onChangeText={setDescricao}
+          placeholder="Ex: Salário do mês, Venda de item"
+          placeholderTextColor={tema.textSecondaryColor}
+          multiline
+          numberOfLines={3}
         />
 
         <TouchableOpacity
-          style={[styles.botao, (!valorRaw || loading || !ipServidor || grupoSelecionado === null || !categoria) && { backgroundColor: tema.itemColor }]}
+          style={[styles.botaoSalvar, { backgroundColor: tema.linkColor }]}
           onPress={handleSalvar}
-          disabled={!valorRaw || loading || !ipServidor || grupoSelecionado === null || !categoria}
+          disabled={loading || !ipServidor || grupoSelecionado === null || !categoria || !valorRaw || parseFloat(valorRaw.replace(',', '.')) <= 0}
         >
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.botaoTexto}>Salvar Entrada</Text>}
         </TouchableOpacity>
       </>
     );
   }
+
+  return (
+    <ScrollView style={{ flex: 1, backgroundColor: tema.backgroundColor }}>
+      {loading && ( // Usa o estado 'loading' para o overlay
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={tema.linkColor} />
+          <Text style={[styles.loadingText, { color: tema.textColor }]}>Carregando...</Text>
+        </View>
+      )}
+
+      <View style={styles.headerContainer}>
+        <Text style={[styles.headerTitle, { color: tema.textColor }]}>Movimentação de Entrada</Text>
+        <TouchableOpacity onPress={() => setShowValues(!showValues)} style={styles.toggleVisibilityButton}>
+          {showValues ? (
+            <Feather name="eye" size={24} color={tema.textColor} />
+          ) : (
+            <Feather name="eye-off" size={24} color={tema.textColor} />
+          )}
+        </TouchableOpacity>
+      </View>
+      <View style={{ padding: 24, paddingBottom: 100 }}>
+        {renderFormulario()}
+
+        <Text style={[styles.label, { color: tema.textColor, textAlign: 'center', marginTop: 30, fontSize: 18 }]}>
+          Histórico de Entradas
+        </Text>
+        {transacoes.length > 0 ? (
+          transacoes.map((item, index) => (
+            <View key={item.id || index} style={{ marginTop: 10 }}>
+              {renderItem({ item })}
+            </View>
+          ))
+        ) : (
+          <Text style={[styles.noDataText, { color: tema.textSecondaryColor }]}>Nenhuma entrada registrada.</Text>
+        )}
+      </View>
+    </ScrollView>
+  );
 }
 
 const styles = StyleSheet.create({
   label: { fontSize: 16, fontWeight: "bold", marginTop: 16, marginBottom: 4 },
-  input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, marginBottom: 8 },
-  pickerContainer: { borderWidth: 1, borderRadius: 8, marginBottom: 8, overflow: 'hidden' },
-  botao: { marginTop: 20, backgroundColor: "#4CAF50", paddingVertical: 12, borderRadius: 8, alignItems: "center" },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10, // Aumentado para melhor toque
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 8,
+    overflow: 'hidden',
+    justifyContent: 'center', // Centraliza o conteúdo verticalmente
+    height: 50, // Altura fixa para o picker
+  },
+  botaoAtualizar: {
+    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  botaoSalvar: { // Novo estilo para o botão de salvar
+    marginTop: 30,
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: "center",
+    elevation: 5, // Sombra para destaque
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
   botaoTexto: { fontSize: 16, fontWeight: "bold", color: "#fff" },
-  card: { padding: 16, borderRadius: 8, marginVertical: 8, elevation: 3 },
-  cardValor: { fontSize: 18, fontWeight: "bold" },
-  cardInfo: { fontSize: 14, marginTop: 4 },
-  headerContainer: { // Novo estilo para o container do cabeçalho
+  card: {
+    padding: 16,
+    borderRadius: 10, // Bordas mais arredondadas
+    marginVertical: 6, // Espaçamento vertical
+    borderWidth: 1, // Adiciona borda
+    elevation: 2, // Sombra mais sutil
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 1.00,
+  },
+  cardRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  cardType: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    backgroundColor: '#e0e0e0', // Fundo para o tipo
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 5,
+    overflow: 'hidden', // Garante que o borderRadius funcione
+  },
+  cardCategory: {
+    fontSize: 14,
+    flex: 1, // Ocupa o espaço restante
+    textAlign: 'center',
+    marginHorizontal: 5,
+  },
+  cardValue: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  cardDescription: {
+    fontSize: 13,
+    marginTop: 5,
+  },
+  cardDate: {
+    fontSize: 12,
+    textAlign: 'right',
+    marginTop: 5,
+  },
+  headerContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 24,
-    paddingBottom: 0, // Ajuste conforme necessário
+    paddingBottom: 0,
   },
-  headerTitle: { // Estilo para o título da tela
+  headerTitle: {
     fontSize: 22,
     fontWeight: "bold",
   },
-  toggleVisibilityButton: { // Estilo para o botão de visibilidade
+  toggleVisibilityButton: {
     padding: 5,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+  },
+  noDataText: {
+    textAlign: 'center',
+    marginTop: 20,
+    fontSize: 16,
   },
 });
