@@ -29,9 +29,9 @@ app.get('/grafico/gastos/:grupoId/:anoMes', async (req, res) => {
         const result = await pool.query(
             `SELECT tipo, SUM(valor) AS total
              FROM (
-                SELECT 'entrada' AS tipo, valor, datacad, chavegrupo FROM entrada
-                UNION ALL
-                SELECT 'saida' AS tipo, valor, datacad, chavegrupo FROM saida
+                 SELECT 'entrada' AS tipo, valor, datacad, chavegrupo FROM entrada
+                 UNION ALL
+                 SELECT 'saida' AS tipo, valor, datacad, chavegrupo FROM saida
              ) AS transacoes
              WHERE to_char(datacad, 'YYYY-MM') = $1
                AND chavegrupo = $2
@@ -69,11 +69,12 @@ app.get('/transacoes/:grupoId/:anoMes', async (req, res) => {
     const { grupoId, anoMes } = req.params;
     try {
         const result = await pool.query(
-            `SELECT tipo, valor, descricao, datacad
+            // Adicionado 'categoria' na query para as telas de relatório
+            `SELECT tipo, valor, descricao, datacad, categoria
              FROM (
-                SELECT 'entrada' AS tipo, valor, descricao, datacad, chavegrupo FROM entrada
-                UNION ALL
-                SELECT 'saida' AS tipo, valor, descricao, datacad, chavegrupo FROM saida
+                 SELECT 'entrada' AS tipo, valor, descricao, datacad, chavegrupo, categoria FROM entrada
+                 UNION ALL
+                 SELECT 'saida' AS tipo, valor, descricao, datacad, chavegrupo, categoria FROM saida
              ) AS transacoes
              WHERE to_char(datacad, 'YYYY-MM') = $1
                AND chavegrupo = $2
@@ -87,7 +88,7 @@ app.get('/transacoes/:grupoId/:anoMes', async (req, res) => {
 });
 
 // ===== ENTRADAS =====
-// GET /entrada - Retorna todas as entradas de uma pessoa, incluindo a categoria
+// GET /entrada - Retorna todas as entradas de uma pessoa, incluindo a categoria e a nova coluna 'taxajuros'
 app.get('/entrada', async (req, res) => {
     const { chavepessoa } = req.query;
 
@@ -96,9 +97,11 @@ app.get('/entrada', async (req, res) => {
     }
 
     try {
+        // Adicionado 'taxajuros' na query
         const result = await pool.query(
-            'SELECT *, categoria FROM entrada WHERE chavepessoa = $1 ORDER BY chave DESC'
-        , [chavepessoa]);
+            'SELECT *, categoria, taxajuros FROM entrada WHERE chavepessoa = $1 ORDER BY chave DESC',
+            [chavepessoa]
+        );
         res.json(result.rows);
     } catch (err) {
         console.error("Erro ao buscar entradas:", err);
@@ -106,19 +109,18 @@ app.get('/entrada', async (req, res) => {
     }
 });
 
-// POST /entrada - Insere uma nova entrada, incluindo a categoria
+// POST /entrada - Insere uma nova entrada, incluindo a categoria e a nova coluna 'taxajuros'
 app.post('/entrada', async (req, res) => {
     const {
         tipo, valor, descricao, qtdeparc, valorparc,
-        datafimparc, chavepessoa, chavegrupo, categoria // Categoria adicionada aqui
+        datafimparc, chavepessoa, chavegrupo, categoria, taxajuros
     } = req.body;
 
     console.log("📥 Dados recebidos em /entrada:", {
         tipo, valor, descricao, qtdeparc, valorparc,
-        datafimparc, chavepessoa, chavegrupo, categoria
+        datafimparc, chavepessoa, chavegrupo, categoria, taxajuros
     });
 
-    // Verificação de tipos
     const chavePessoaNum = Number(chavepessoa);
     const chaveGrupoNum = Number(chavegrupo);
 
@@ -141,12 +143,13 @@ app.post('/entrada', async (req, res) => {
             return res.status(403).json({ erro: "Usuário não pertence ao grupo informado." });
         }
 
+        // Adicionado 'taxajuros' na query de INSERT
         const resultado = await pool.query(
             `INSERT INTO entrada
-             (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo, categoria)
-             VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9)
+             (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo, categoria, taxajuros)
+             VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9, $10)
              RETURNING *`,
-            [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavePessoaNum, chaveGrupoNum, categoria]
+            [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavePessoaNum, chaveGrupoNum, categoria, taxajuros]
         );
 
         console.log("✅ Entrada salva com sucesso:", resultado.rows[0]);
@@ -160,7 +163,7 @@ app.post('/entrada', async (req, res) => {
 
 
 // ===== SAÍDAS =====
-// GET /saida - Retorna todas as saídas de uma pessoa, incluindo a categoria
+// GET /saida - Retorna todas as saídas de uma pessoa, incluindo a categoria e a nova coluna 'taxajuros' (se existir)
 app.get('/saida', async (req, res) => {
     const { chavepessoa } = req.query;
 
@@ -169,9 +172,11 @@ app.get('/saida', async (req, res) => {
     }
 
     try {
+        // Adicionado 'taxajuros' na query (assumindo que a coluna foi adicionada)
         const result = await pool.query(
-            'SELECT *, categoria FROM saida WHERE chavepessoa = $1 ORDER BY chave DESC'
-        , [chavepessoa]);
+            'SELECT *, categoria, taxajuros FROM saida WHERE chavepessoa = $1 ORDER BY chave DESC',
+            [chavepessoa]
+        );
         res.json(result.rows);
     } catch (err) {
         console.error("Erro ao buscar saídas:", err);
@@ -179,14 +184,13 @@ app.get('/saida', async (req, res) => {
     }
 });
 
-// POST /saida - Insere uma nova saída, incluindo a categoria
+// POST /saida - Insere uma nova saída, incluindo a categoria e a nova coluna 'taxajuros' (se existir)
 app.post('/saida', async (req, res) => {
     const {
         tipo, valor, descricao, qtdeparc, valorparc,
-        datafimparc, chavepessoa, chavegrupo, categoria // Categoria adicionada aqui
+        datafimparc, chavepessoa, chavegrupo, categoria, taxajuros
     } = req.body;
 
-    // Verificação de tipos (mantida a validação de 'number' para chavepessoa/chavegrupo)
     if (typeof chavepessoa !== 'number' || isNaN(chavepessoa)) {
         return res.status(400).json({ erro: "Campo 'chavepessoa' deve ser um número válido." });
     }
@@ -205,12 +209,13 @@ app.post('/saida', async (req, res) => {
             return res.status(403).json({ erro: "Usuário não pertence ao grupo informado." });
         }
 
+        // Adicionado 'taxajuros' na query de INSERT
         const result = await pool.query(
             `INSERT INTO saida
-             (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo, categoria)
-             VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9)
+             (tipo, valor, descricao, datacad, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo, categoria, taxajuros)
+             VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9, $10)
              RETURNING *`,
-            [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo, categoria]
+            [tipo, valor, descricao, qtdeparc, valorparc, datafimparc, chavepessoa, chavegrupo, categoria, taxajuros]
         );
 
         res.status(201).json(result.rows[0]);
@@ -425,7 +430,7 @@ app.get('/grupo/usuario/:usuarioId', async (req, res) => {
     try {
         const result = await pool.query(
             `SELECT DISTINCT g.*,
-                    CASE WHEN g.chaveusuariocriou = $1 THEN true ELSE false END AS soucriador
+                     CASE WHEN g.chaveusuariocriou = $1 THEN true ELSE false END AS soucriador
              FROM grupo g
              LEFT JOIN pessoasgrupo pg ON g.chave = pg.chavegrupo
              WHERE g.chaveusuariocriou = $1 OR pg.chaveusuario = $1
@@ -518,5 +523,5 @@ app.get('/grupo/:grupoId/membros', async (req, res) => {
 // ===== INICIAR SERVIDOR =====
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🟢 Servidor BTCF rodando na porta ${PORT}`);
-    console.log(`     Acesse via: http://localhost:${PORT}`);
+    console.log(`     Acesse via: http://localhost:${PORT}`);
 });

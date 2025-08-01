@@ -59,6 +59,9 @@ export default function MovimentacaoEntrada() {
   // Novo estado para controlar a visibilidade dos valores
   const [showValues, setShowValues] = useState(true);
 
+  // Novo estado para a taxa de juros com valor padrão "0"
+  const [taxaJuros, setTaxaJuros] = useState<string>("0,00");
+
   // Função para formatar valores monetários (com ou sem asteriscos)
   const formatCurrency = useCallback((value: any): string => {
     if (value === null || value === undefined) {
@@ -84,7 +87,7 @@ export default function MovimentacaoEntrada() {
     }
 
     if (!Number.isFinite(numericValue)) {
-        return "R$ 0,00";
+      return "R$ 0,00";
     }
 
     return `R$ ${numericValue.toFixed(2).replace('.', ',')}`;
@@ -92,7 +95,7 @@ export default function MovimentacaoEntrada() {
 
   // Função para carregar o IP do servidor e o ID do usuário
   const loadConfig = useCallback(async () => {
-    setLoading(true); // Inicia loading ao carregar configs
+    setLoading(true);
     try {
       const storedIp = await AsyncStorage.getItem("ipServidor");
       if (storedIp) {
@@ -124,7 +127,7 @@ export default function MovimentacaoEntrada() {
       console.error("Erro ao carregar configurações:", err.message);
       Alert.alert("Erro", "Não foi possível obter as configurações iniciais.");
     } finally {
-      setLoading(false); // Finaliza loading após carregar configs
+      setLoading(false);
     }
   }, []);
 
@@ -165,16 +168,14 @@ export default function MovimentacaoEntrada() {
       return;
     }
     try {
-      // Endpoint para buscar categorias de entrada
       const response = await fetch(`${ipServidor}/categorias/${usuarioId}/entrada`);
       const data: Categoria[] = await response.json();
       if (response.ok) {
         setCategoriasDisponiveis(data);
-        // Define a primeira categoria como padrão se houver categorias
         if (data.length > 0) {
           setCategoria(data[0].nome_categoria);
         } else {
-          setCategoria(""); // Nenhuma categoria disponível
+          setCategoria("");
         }
       } else {
         throw new Error(data.erro || "Erro ao buscar categorias.");
@@ -205,23 +206,22 @@ export default function MovimentacaoEntrada() {
       if (!usuarioId || !ipServidor) throw new Error("Usuário ou IP não encontrado.");
 
       const response = await fetch(`${ipServidor}/entrada?chavepessoa=${usuarioId}`);
-      const dados: any[] = await response.json(); // Use any[] para flexibilidade na resposta da API
+      const dados: any[] = await response.json();
 
       if (!response.ok) throw new Error(dados.erro || "Erro ao buscar histórico.");
 
       const dadosComCategoria: Transacao[] = dados.map(item => ({
-        id: item.id || item.chave, // Garante que 'id' exista, pode ser 'chave' do backend
-        valor: typeof item.valor === 'number' ? item.valor : parseFloat(item.valor?.replace(',', '.') || '0'), // Garante que valor é number
+        id: item.id || item.chave,
+        valor: typeof item.valor === 'number' ? item.valor : parseFloat(item.valor?.replace(',', '.') || '0'),
         tipo: item.tipo || '',
-        categoria: item.categoria || "Não Definida", // Define um valor padrão se não existir
+        categoria: item.categoria || "Não Definida",
         descricao: item.descricao || '',
-        data: item.data || item.datacad || new Date().toISOString().slice(0, 10), // Garante que data exista
+        data: item.data || item.datacad || new Date().toISOString().slice(0, 10),
       }));
       setTransacoes(dadosComCategoria);
       await salvarHistoricoLocal(dadosComCategoria);
     } catch (err: any) {
       console.error("Erro ao carregar histórico do servidor:", err.message);
-      // Não exibe Alert aqui para não ser muito intrusivo no carregamento inicial
     }
   };
 
@@ -236,10 +236,12 @@ export default function MovimentacaoEntrada() {
   useEffect(() => {
     if (tipo === "parcelado" && valorRaw && parcelas) {
       const qtd = parseInt(parcelas);
-      // Converte valorRaw para número antes de usar
       const val = parseFloat(valorRaw.replace(',', '.'));
+      const juros = taxaJuros ? parseFloat(taxaJuros.replace(',', '.')) / 100 : 0;
       if (!isNaN(qtd) && qtd > 0 && !isNaN(val)) {
-        setValorParcela((val / qtd).toFixed(2));
+        // Cálculo do valor da parcela com juros simples
+        const valorTotalComJuros = val * (1 + juros);
+        setValorParcela((valorTotalComJuros / qtd).toFixed(2));
         const fim = new Date(data);
         fim.setMonth(fim.getMonth() + qtd);
         setDataTermino(fim.toISOString().slice(0, 10));
@@ -251,7 +253,7 @@ export default function MovimentacaoEntrada() {
       setValorParcela("");
       setDataTermino("");
     }
-  }, [tipo, valorRaw, parcelas, data]);
+  }, [tipo, valorRaw, parcelas, data, taxaJuros]);
 
   // Atualiza o valor de exibição quando valorRaw muda
   useEffect(() => {
@@ -285,6 +287,11 @@ export default function MovimentacaoEntrada() {
       Alert.alert("Erro", "Selecione uma categoria.");
       return;
     }
+    if (tipo === 'parcelado' && !taxaJuros.trim()) {
+        Alert.alert("Erro", "A taxa de juros é obrigatória para transações parceladas.");
+        return;
+    }
+
 
     try {
       setLoading(true);
@@ -294,6 +301,7 @@ export default function MovimentacaoEntrada() {
       const valorParcelaNumerico = tipo === "parcelado" && valorParcela ? parseFloat(valorParcela.replace(',', '.')) : valorNumerico;
       const dataFimParcelas = tipo === "parcelado" ? dataTermino : data;
       const valorFormatado = formatarComoMoeda(valorRaw);
+      const taxaJurosNumerica = tipo === "parcelado" && taxaJuros ? parseFloat(taxaJuros.replace(',', '.')) : 0;
 
       const body = {
         tipo,
@@ -305,6 +313,7 @@ export default function MovimentacaoEntrada() {
         datafimparc: dataFimParcelas,
         chavepessoa: usuarioId,
         chavegrupo: grupoSelecionado,
+        taxajuros: taxaJurosNumerica
       };
 
       console.log("📤 Enviando dados para API /entrada:", body);
@@ -331,23 +340,20 @@ export default function MovimentacaoEntrada() {
         data: resposta.datacad,
       };
 
-      // Não sobrescreve o grupo selecionado no AsyncStorage, apenas o usa
-      // await AsyncStorage.setItem("grupoSelecionado", grupoSelecionado.toString());
-
       const novaLista = [novaTransacao, ...transacoes];
       setTransacoes(novaLista);
       await salvarHistoricoLocal(novaLista);
 
-      // Limpar formulário
       setValorRaw("");
       setValorExibicao("0,00");
       setTipo("avista");
-      setCategoria(categoriasDisponiveis.length > 0 ? categoriasDisponiveis[0].nome_categoria : ""); // Resetar para a primeira categoria disponível
+      setCategoria(categoriasDisponiveis.length > 0 ? categoriasDisponiveis[0].nome_categoria : "");
       setParcelas("");
       setValorParcela("");
       setDataTermino("");
       setDescricao("");
       setData(new Date().toISOString().slice(0, 10));
+      setTaxaJuros("0,00");
 
       Alert.alert("✅ Sucesso", "Entrada registrada com sucesso.");
     } catch (error: any) {
@@ -383,7 +389,7 @@ export default function MovimentacaoEntrada() {
     return (
       <>
         <Text style={[styles.label, { color: tema.textColor }]}>Grupo</Text>
-        <View style={[styles.pickerContainer, { borderColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground }]}>
+        <View style={[styles.pickerContainer, { borderColor: tema.inputBorderColor, backgroundColor: tema.inputBackground }]}>
           <Picker
             selectedValue={grupoSelecionado}
             onValueChange={(itemValue) => setGrupoSelecionado(itemValue)}
@@ -418,12 +424,10 @@ export default function MovimentacaoEntrada() {
           keyboardType="numeric"
           placeholder="0,00"
           placeholderTextColor={tema.textSecondaryColor}
-          value={valorExibicao} // Exibe o valor formatado
+          value={valorExibicao}
           onChangeText={(text) => {
-            // Remove tudo que não for número antes de salvar no valorRaw
             const raw = text.replace(/\D/g, "");
             setValorRaw(raw);
-            // setValorExibicao(formatarComoMoeda(raw)); // Já é feito no useEffect
           }}
         />
 
@@ -503,6 +507,22 @@ export default function MovimentacaoEntrada() {
               value={parcelas}
               onChangeText={setParcelas}
             />
+
+            {/* Adicionado: Campo para a taxa de juros */}
+            <Text style={[styles.label, { color: tema.textColor }]}>Taxa de Juros (%)</Text>
+            <TextInput
+              style={[styles.input, {
+                borderColor: tema.inputBorderColor,
+                backgroundColor: tema.inputBackground,
+                color: tema.textColor,
+              }]}
+              keyboardType="decimal-pad" // Alterado para 'decimal-pad' para melhor usabilidade
+              placeholder="Ex: 1,50"
+              placeholderTextColor={tema.textSecondaryColor}
+              value={taxaJuros}
+              onChangeText={(text) => setTaxaJuros(text.replace(/[^0-9,.]/g, ''))} // Permite números, vírgula e ponto
+            />
+
             <Text style={[styles.label, { color: tema.textColor }]}>Valor por Parcela</Text>
             <TextInput
               style={[styles.input, { backgroundColor: tema.sectionBoxBackground, color: tema.textColor, opacity: 0.7 }]}
@@ -589,7 +609,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10, // Aumentado para melhor toque
+    paddingVertical: 10,
     fontSize: 16,
     marginBottom: 8,
   },
@@ -598,8 +618,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
     overflow: 'hidden',
-    justifyContent: 'center', // Centraliza o conteúdo verticalmente
-    height: 50, // Altura fixa para o picker
+    justifyContent: 'center',
+    height: 50,
   },
   botaoAtualizar: {
     marginTop: 10,
@@ -607,12 +627,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
   },
-  botaoSalvar: { // Novo estilo para o botão de salvar
+  botaoSalvar: {
     marginTop: 30,
     paddingVertical: 15,
     borderRadius: 10,
     alignItems: "center",
-    elevation: 5, // Sombra para destaque
+    elevation: 5,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
@@ -621,10 +641,10 @@ const styles = StyleSheet.create({
   botaoTexto: { fontSize: 16, fontWeight: "bold", color: "#fff" },
   card: {
     padding: 16,
-    borderRadius: 10, // Bordas mais arredondadas
-    marginVertical: 6, // Espaçamento vertical
-    borderWidth: 1, // Adiciona borda
-    elevation: 2, // Sombra mais sutil
+    borderRadius: 10,
+    marginVertical: 6,
+    borderWidth: 1,
+    elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.18,
@@ -639,15 +659,15 @@ const styles = StyleSheet.create({
   cardType: {
     fontSize: 14,
     fontWeight: 'bold',
-    backgroundColor: '#e0e0e0', // Fundo para o tipo
+    backgroundColor: '#e0e0e0',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 5,
-    overflow: 'hidden', // Garante que o borderRadius funcione
+    overflow: 'hidden',
   },
   cardCategory: {
     fontSize: 14,
-    flex: 1, // Ocupa o espaço restante
+    flex: 1,
     textAlign: 'center',
     marginHorizontal: 5,
   },
