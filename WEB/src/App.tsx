@@ -4,7 +4,8 @@ import LoginPage from './pages/Auth/LoginPage';
 import RegisterPage from './pages/Auth/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 
-// Componente para lidar com a autenticação
+// Esta função simula a checagem de autenticação.
+// A rota raiz (/) agora redireciona para a tela de login se o usuário não estiver autenticado.
 const isAuthenticated = () => {
   return !!localStorage.getItem('user');
 };
@@ -25,6 +26,7 @@ function App() {
           path="/dashboard"
           element={isAuthenticated() ? <DashboardPage /> : <Navigate to="/login" />}
         />
+        
       </Routes>
     </Router>
   );

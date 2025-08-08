@@ -16,7 +16,6 @@ export default function LoginPage() {
     const senhaPadrao = '12345';
 
     if (email === usuarioPadrao && senha === senhaPadrao) {
-      // Simula o login bem-sucedido
       localStorage.setItem('user', 'true');
       navigate('/dashboard');
     } else {
@@ -25,8 +24,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="p-8 bg-white rounded-xl shadow-2xl w-96">
+    <div className="flex items-center justify-center min-h-screen bg-slate-500">
+      <div className="p-8 bg-white rounded-xl shadow-2xl w-full max-w-md">
         <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">Login</h2>
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
