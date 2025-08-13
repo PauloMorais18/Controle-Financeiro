@@ -8,22 +8,25 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  Alert, // Usar Alert para mensagens simples, como no seu Principal.tsx
-  ActivityIndicator, // Para indicar carregamento
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter, useFocusEffect } from "expo-router";
-import { useTheme } from "./ThemeContext"; // Certifique-se de que o caminho para ThemeContext está correto
-import { PieChart, BarChart } from "react-native-chart-kit"; // Importa BarChart também
-import { Feather } from '@expo/vector-icons'; // Ícones de olho aberto e fechado
+import { useTheme } from "./ThemeContext";
+import { PieChart, BarChart } from "react-native-chart-kit";
+import { Feather } from '@expo/vector-icons';
+
+// PDF e e-mail (instalar: npx expo install expo-print expo-mail-composer)
+import * as Print from "expo-print";
+import * as MailComposer from "expo-mail-composer";
 
 const screenWidth = Dimensions.get("window").width;
 
-// Interface para os dados do PieChart e BarChart
 interface ChartDataEntry {
   name: string;
-  population: number; // Para PieChart (valor)
-  value: number; // Para BarChart (valor)
+  population: number; // PieChart
+  value: number;      // (não usado aqui)
   color: string;
   legendFontColor?: string;
   legendFontSize?: number;
@@ -38,42 +41,44 @@ export default function RelatorioFinanceiro() {
   const [modalDataVisivel, setModalDataVisivel] = useState(false);
   const [grupos, setGrupos] = useState<any[]>([]);
   const [grupoSelecionado, setGrupoSelecionado] = useState<any>(null);
+
   const [totais, setTotais] = useState({ entradas: 0, saidas: 0 });
+
+  // Pizza (apenas nomes na legenda)
   const [despesasPorCategoria, setDespesasPorCategoria] = useState<ChartDataEntry[]>([]);
+
+  // Totais por categoria (BarChart)
+  const [labelsCategorias, setLabelsCategorias] = useState<string[]>([]);
+  const [totaisCategorias, setTotaisCategorias] = useState<number[]>([]);
+
   const [transacoes, setTransacoes] = useState<any[]>([]);
   const [showValues, setShowValues] = useState(true);
-  const [isLoading, setIsLoading] = useState(false); // Novo estado para carregamento
-  const [networkError, setNetworkError] = useState<string | null>(null); // Novo estado para erros de rede
+  const [isLoading, setIsLoading] = useState(false);
+  const [networkError, setNetworkError] = useState<string | null>(null);
 
-  // Função para formatar valores monetários (com ou sem asteriscos)
-  const formatCurrency = useCallback((value: number) => {
-    if (typeof value !== 'number' || isNaN(value)) { // Adicionado: Verifica se o valor é um número válido
-      return "R$ --,--"; // Retorna um placeholder se o valor não for um número
-    }
-    if (!showValues) {
-      return "R$ *****";
-    }
-    return `R$ ${value.toFixed(2).replace('.', ',')}`;
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF19A6', '#19FFD4', '#FFD700'];
+
+  const formatCurrency = useCallback((value: number | string) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "R$ --,--";
+    if (!showValues) return "R$ *****";
+    const fixed = num.toFixed(2);
+    const [int, dec] = fixed.split(".");
+    const intWithSep = int.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return `R$ ${intWithSep},${dec}`;
   }, [showValues]);
 
-  // Função para buscar grupos do usuário
   const fetchGrupos = useCallback(async (ip: string, userId: number) => {
-    setNetworkError(null); // Limpa erros de rede anteriores
+    setNetworkError(null);
     try {
       const response = await fetch(`${ip}/grupo/usuario/${userId}`);
-      if (!response.ok) {
-        throw new Error(`Erro ao buscar grupos: ${response.statusText || response.status}`);
-      }
+      if (!response.ok) throw new Error(`Erro ao buscar grupos: ${response.statusText || response.status}`);
       const data = await response.json();
       setGrupos(data);
-      // Tenta carregar o grupo salvo ou seleciona o primeiro
+
       const grupoSalvo = await AsyncStorage.getItem("grupoSelecionado");
       const grupoAtual = grupoSalvo ? data.find((g: any) => g.chave === parseInt(grupoSalvo)) : null;
-      if (grupoAtual || data[0]) {
-        setGrupoSelecionado(grupoAtual || data[0]);
-      } else {
-        setGrupoSelecionado(null);
-      }
+      setGrupoSelecionado(grupoAtual || data[0] || null);
     } catch (error: any) {
       console.error("Erro em fetchGrupos:", error);
       setNetworkError(`Não foi possível conectar ao servidor. Verifique o IP e a conexão. Detalhes: ${error.message}`);
@@ -81,18 +86,18 @@ export default function RelatorioFinanceiro() {
     }
   }, []);
 
-  // Função para buscar dados do relatório
   const fetchReportData = useCallback(async () => {
     if (!grupoSelecionado?.chave || !dataAtual) {
-      // Limpa os dados se não houver grupo ou data selecionada
       setTotais({ entradas: 0, saidas: 0 });
       setDespesasPorCategoria([]);
+      setLabelsCategorias([]);
+      setTotaisCategorias([]);
       setTransacoes([]);
       return;
     }
 
     setIsLoading(true);
-    setNetworkError(null); // Limpa erros de rede anteriores
+    setNetworkError(null);
     try {
       const ip = await AsyncStorage.getItem("ipServidor");
       if (!ip) {
@@ -104,43 +109,42 @@ export default function RelatorioFinanceiro() {
       const anoMes = dataAtual.toISOString().slice(0, 7);
       const grupoId = grupoSelecionado.chave;
 
-      console.log(`Buscando dados para Grupo: ${grupoId}, Mês/Ano: ${anoMes}`);
-
-      // 1. Buscar totais de gastos (entrada/saída)
+      // 1) Totais entradas/saídas
       const gastosRes = await fetch(`${ip}/grafico/gastos/${grupoId}/${anoMes}`);
       if (!gastosRes.ok) throw new Error(`Erro ao buscar totais de gastos: ${gastosRes.statusText || gastosRes.status}`);
       const gastosData = await gastosRes.json();
-      console.log("Dados de gastos (entradas/saídas):", gastosData);
 
       let entradas = 0, saidas = 0;
       gastosData.forEach((item: any) => {
-        const valor = Number(item.total);
+        const valor = Number(item.total) || 0;
         if (item.tipo === "entrada") entradas += valor;
-        if (item.tipo === "saida") saidas += valor;
+        if (item.tipo === "saida")   saidas   += valor;
       });
       setTotais({ entradas, saidas });
 
-      // 2. Buscar despesas por categoria
+      // 2) Despesas por categoria
       const despesasCategoriaRes = await fetch(`${ip}/grafico/despesas-por-categoria/${grupoId}/${anoMes}`);
       if (!despesasCategoriaRes.ok) throw new Error(`Erro ao buscar despesas por categoria: ${despesasCategoriaRes.statusText || despesasCategoriaRes.status}`);
       const despesasCategoriaData = await despesasCategoriaRes.json();
-      console.log("Dados de despesas por categoria:", despesasCategoriaData);
-      
-      const formattedDespesas = despesasCategoriaData.map((item: any, index: number) => ({
-        name: item.categoria || 'Outros', // Usar 'Outros' se a categoria for nula/indefinida
-        population: parseFloat(item.total), // 'population' para PieChart
+
+      const pie = despesasCategoriaData.map((item: any, index: number) => ({
+        name: item.categoria || 'Outros',
+        population: Number(item.total) || 0,
         color: COLORS[index % COLORS.length],
         legendFontColor: tema.textColor,
         legendFontSize: 14,
       }));
-      setDespesasPorCategoria(formattedDespesas);
+      setDespesasPorCategoria(pie);
 
-      // 3. Buscar histórico de transações
-      // Assumimos que o backend AGORA retorna a categoria na rota /transacoes
+      const labels = despesasCategoriaData.map((d: any) => (d.categoria || 'Outros'));
+      const valores = despesasCategoriaData.map((d: any) => Number(d.total) || 0);
+      setLabelsCategorias(labels);
+      setTotaisCategorias(valores);
+
+      // 3) Histórico
       const transacoesRes = await fetch(`${ip}/transacoes/${grupoId}/${anoMes}`);
       if (!transacoesRes.ok) throw new Error(`Erro ao buscar transações: ${transacoesRes.statusText || transacoesRes.status}`);
       const transacoesData = await transacoesRes.json();
-      console.log("Dados de transações (histórico):", transacoesData);
       setTransacoes(transacoesData);
 
     } catch (error: any) {
@@ -152,12 +156,11 @@ export default function RelatorioFinanceiro() {
     }
   }, [grupoSelecionado, dataAtual, tema.textColor]);
 
-  // Efeito para carregar grupos e dados iniciais ao focar na tela
   useFocusEffect(
     useCallback(() => {
       async function loadInitialData() {
         setIsLoading(true);
-        setNetworkError(null); // Limpa erros de rede anteriores
+        setNetworkError(null);
         try {
           const [email, ip] = await Promise.all([
             AsyncStorage.getItem("usuarioEmail"),
@@ -165,17 +168,13 @@ export default function RelatorioFinanceiro() {
           ]);
           if (!email || !ip) {
             Alert.alert("Erro", "Dados de autenticação ausentes. Por favor, faça login novamente.");
-            router.replace('/login'); // Redireciona para o login se não houver dados
+            router.replace('/login');
             return;
           }
-
           const usuarioRes = await fetch(`${ip}/usuario/por-email/${email}`);
           if (!usuarioRes.ok) throw new Error("Usuário não encontrado.");
           const usuario = await usuarioRes.json();
-          
-          // Chama fetchGrupos para carregar e selecionar o grupo
           await fetchGrupos(ip, usuario.chave);
-          
         } catch (err: any) {
           console.error("Erro em loadInitialData:", err);
           setNetworkError(`Erro ao iniciar o aplicativo. Verifique o IP e a conexão. Detalhes: ${err.message}`);
@@ -188,13 +187,9 @@ export default function RelatorioFinanceiro() {
     }, [fetchGrupos, router])
   );
 
-  // Efeito para buscar dados do relatório sempre que o grupo ou data mudar
   useEffect(() => {
     fetchReportData();
   }, [fetchReportData]);
-
-  // Cores para os gráficos (mesmas do seu componente anterior)
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF19A6', '#19FFD4', '#FFD700'];
 
   function formatarMes(data: Date) {
     return data.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
@@ -207,43 +202,145 @@ export default function RelatorioFinanceiro() {
   }
 
   const saldo = totais.entradas - totais.saidas;
-  // Removido o status "Positivo" / "Negativo" do saldo
-  // const statusSaldo = saldo >= 0 ? "Positivo" : "Negativo";
 
-  // Dados para o BarChart (Receitas vs. Despesas)
+  // BarChart Receitas vs Despesas
   const barChartData = {
     labels: ["Receitas", "Despesas"],
-    datasets: [
-      {
-        data: [totais.entradas, totais.saidas],
-        colors: [
-          (opacity = 1) => `rgba(0, 128, 0, ${opacity})`, // Verde para Receitas
-          (opacity = 1) => `rgba(255, 0, 0, ${opacity})`, // Vermelho para Despesas
-        ],
-      },
-    ],
+    datasets: [{ data: [totais.entradas, totais.saidas] }],
   };
 
-  // Configuração do gráfico para react-native-chart-kit
+  // BarChart Totais por Categoria
+  const barChartCategorias = {
+    labels: labelsCategorias,
+    datasets: [{ data: totaisCategorias }],
+  };
+
+  // Configuração comum dos gráficos (labelColor precisa receber opacity)
   const chartConfig = {
     backgroundColor: tema.sectionBoxBackground,
     backgroundGradientFrom: tema.sectionBoxBackground,
     backgroundGradientTo: tema.sectionBoxBackground,
-    decimalPlaces: 2, // opcional, para formatar valores
-    color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`, // Cor padrão para labels do gráfico
-    labelColor: (opacity = 1) => tema.textColor, // Cor dos labels da legenda
-    propsForLabels: {
-      fill: tema.textColor, // Cor do texto dos labels na pizza (não usado diretamente com absolute=false)
-    },
-    propsForBackgroundLines: {
-      strokeDasharray: "", // Linhas sólidas
-      stroke: tema.inputBorderColor, // Cor das linhas de fundo
-    },
-    fillShadowGradient: tema.linkColor, // Cor do gradiente de preenchimento
-    fillShadowGradientOpacity: 0.5, // Opacidade do gradiente
-    formatYLabel: (yValue: string) => formatCurrency(parseFloat(yValue)), // Movido para cá e tipado
-    // yAxisSuffix: "R$", // Removido daqui, pois será passado diretamente para o BarChart
-  };
+    decimalPlaces: 2,
+    color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+    labelColor: (opacity = 1) => tema.textColor,
+    // As chaves abaixo não são obrigatórias para o tipo, mas são aceitas em runtime:
+    // @ts-ignore
+    propsForLabels: { fill: tema.textColor },
+    // @ts-ignore
+    propsForBackgroundLines: { strokeDasharray: "", stroke: tema.inputBorderColor },
+    fillShadowGradient: tema.linkColor,
+    fillShadowGradientOpacity: 0.5,
+    formatYLabel: (yValue: string) => formatCurrency(yValue),
+  } as const;
+
+  // ========= GERAR PDF E ENVIAR POR E-MAIL =========
+  const buildReportHtml = useCallback(() => {
+    const dataLegivel = formatarMes(dataAtual);
+    const grupoNome = grupoSelecionado?.nome || "—";
+
+    const linhasCategorias = labelsCategorias.map((nome, i) => {
+      const val = formatCurrency(totaisCategorias[i] || 0);
+      return `<tr>
+        <td style="padding:8px;border:1px solid #ddd;">${nome}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:right;">${val}</td>
+      </tr>`;
+    }).join("");
+
+    return `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Relatório Financeiro</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #222; }
+            h1, h2 { margin: 0; padding: 0; }
+            .cabecalho { margin-bottom: 16px; }
+            .box { border:1px solid #ddd; border-radius:8px; padding:12px; margin: 12px 0; }
+            .totais { display:flex; justify-content:space-between; gap:12px; flex-wrap: wrap; }
+            .tag { padding:4px 8px; border-radius:6px; }
+            .verde { background:#e6ffe6; }
+            .vermelho { background:#ffe6e6; }
+            table { width:100%; border-collapse:collapse; margin-top:8px; }
+            th, td { font-size: 12px; }
+            th { background:#f8f8f8; text-align:left; }
+            .rodape { margin-top: 12px; font-size: 11px; color:#555; }
+          </style>
+        </head>
+        <body>
+          <div class="cabecalho">
+            <h1>Relatório Financeiro</h1>
+            <div>Grupo: <b>${grupoNome}</b></div>
+            <div>Período: <b>${dataLegivel}</b></div>
+          </div>
+
+          <div class="box">
+            <h2>Resumo</h2>
+            <div class="totais">
+              <div>Entradas: <span class="tag verde">${formatCurrency(totais.entradas)}</span></div>
+              <div>Saídas: <span class="tag vermelho">${formatCurrency(totais.saidas)}</span></div>
+              <div>Saldo: <b>${formatCurrency(saldo)}</b></div>
+            </div>
+          </div>
+
+          <div class="box">
+            <h2>Totais por Categoria</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th style="padding:8px;border:1px solid #ddd;">Categoria</th>
+                  <th style="padding:8px;border:1px solid #ddd;text-align:right;">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${linhasCategorias || '<tr><td colspan="2" style="padding:8px;border:1px solid #ddd;text-align:center;">Sem dados</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="rodape">
+            Gerado em ${new Date().toLocaleString('pt-BR')}
+          </div>
+        </body>
+      </html>
+    `;
+  }, [dataAtual, grupoSelecionado, labelsCategorias, totaisCategorias, totais, saldo, formatCurrency]);
+
+  const generatePdfReport = useCallback(async () => {
+    try {
+      const html = buildReportHtml();
+      const { uri } = await Print.printToFileAsync({ html });
+      return uri; // caminho local do PDF
+    } catch (e: any) {
+      Alert.alert("Erro", "Falha ao gerar PDF: " + e.message);
+      return null;
+    }
+  }, [buildReportHtml]);
+
+  const handleSendEmail = useCallback(async () => {
+    const email = await AsyncStorage.getItem("usuarioEmail");
+    if (!email) {
+      Alert.alert("Atenção", "E-mail do usuário não encontrado. Faça login novamente.");
+      return;
+    }
+    const pdfUri = await generatePdfReport();
+    if (!pdfUri) return;
+
+    const available = await MailComposer.isAvailableAsync();
+    if (!available) {
+      Alert.alert("Atenção", "Envio de e-mail não está disponível neste dispositivo.");
+      return;
+    }
+
+    await MailComposer.composeAsync({
+      recipients: [email],
+      subject: "Relatório Financeiro",
+      body: "Segue em anexo o relatório financeiro do período selecionado.",
+      attachments: [pdfUri],
+    });
+  }, [generatePdfReport]);
+
+  // ====================================
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
@@ -266,7 +363,7 @@ export default function RelatorioFinanceiro() {
 
       <Text style={[styles.title, { color: tema.textColor }]}>Relatório Financeiro</Text>
 
-      {/* Seção de Filtros */}
+      {/* Filtros */}
       <View style={styles.filtrosRow}>
         <TouchableOpacity onPress={() => setModalGrupoVisivel(true)} style={[styles.filtroBotao, { borderColor: tema.inputBorderColor }]}>
           <Text style={[styles.filtroTexto, { color: tema.textColor }]}>
@@ -283,7 +380,15 @@ export default function RelatorioFinanceiro() {
         </TouchableOpacity>
       </View>
 
-      {/* Seção de Resumo Financeiro */}
+      {/* Botão de e-mail */}
+      <View style={styles.exportRow}>
+        <TouchableOpacity style={[styles.exportBtn, { backgroundColor: tema.linkColor }]} onPress={handleSendEmail}>
+          <Feather name="mail" size={18} color="#fff" />
+          <Text style={styles.exportBtnText}>Enviar por e-mail</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Resumo Financeiro */}
       <View style={[styles.cardTotais, { backgroundColor: tema.sectionBoxBackground }]}>
         <View style={styles.saldoHeader}>
           <Text style={[styles.valorTotal, { color: tema.textColor }]}>Saldo Total</Text>
@@ -304,86 +409,108 @@ export default function RelatorioFinanceiro() {
         </View>
       </View>
 
-      {/* Seção de Gráficos */}
+      {/* Gráficos */}
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>Gráficos do Período</Text>
+
+      {/* Pizza: Despesas por Categoria (legenda só com nomes) */}
       <View style={[styles.chartContainer, { backgroundColor: tema.sectionBoxBackground }]}>
         <Text style={[styles.chartTitle, { color: tema.textColor }]}>Despesas por Categoria</Text>
         {despesasPorCategoria.length > 0 && despesasPorCategoria.some(d => d.population > 0) ? (
           <PieChart
             data={despesasPorCategoria}
-            width={screenWidth - 64} // Ajuste para padding do container
+            width={screenWidth - 64}
             height={220}
             chartConfig={chartConfig}
             accessor="population"
             backgroundColor="transparent"
             paddingLeft="15"
-            absolute={false} // Para usar a legenda built-in com porcentagens
+            absolute={false}
+            hasLegend={true}
           />
         ) : (
           <Text style={[styles.noDataText, { color: tema.textColor }]}>Nenhuma despesa por categoria para este período.</Text>
         )}
       </View>
 
+      {/* Totais por Categoria (BarChart) */}
+      <View style={[styles.chartContainer, { backgroundColor: tema.sectionBoxBackground }]}>
+        <Text style={[styles.chartTitle, { color: tema.textColor }]}>Totais por Categoria</Text>
+        {totaisCategorias.length > 0 && totaisCategorias.some(v => v > 0) ? (
+          <BarChart
+            data={barChartCategorias}
+            width={screenWidth - 64}
+            height={260}
+            chartConfig={chartConfig}
+            verticalLabelRotation={45}
+            fromZero
+          />
+        ) : (
+          <Text style={[styles.noDataText, { color: tema.textColor }]}>Sem totais por categoria para o período.</Text>
+        )}
+      </View>
+
+      {/* Barras: Receitas vs. Despesas */}
       <View style={[styles.chartContainer, { backgroundColor: tema.sectionBoxBackground }]}>
         <Text style={[styles.chartTitle, { color: tema.textColor }]}>Receitas vs. Despesas</Text>
         {(totais.entradas > 0 || totais.saidas > 0) ? (
           <BarChart
             data={barChartData}
-            width={screenWidth - 64} // Ajuste para padding do container
+            width={screenWidth - 64}
             height={220}
-            yAxisLabel="R$"
-            yAxisSuffix="R$" // Adicionado diretamente aqui
-            chartConfig={chartConfig} // chartConfig já inclui formatYLabel
-            verticalLabelRotation={0}
-            fromZero={true} // Inicia o eixo Y em zero
+            chartConfig={chartConfig}
+            fromZero
           />
         ) : (
           <Text style={[styles.noDataText, { color: tema.textColor }]}>Nenhum dado de receita ou despesa para este período.</Text>
         )}
       </View>
 
-      {/* Seção de Histórico de Transações */}
+      {/* Histórico */}
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>Histórico de Transações</Text>
       <View style={[styles.transactionsContainer, { backgroundColor: tema.sectionBoxBackground }]}>
         {transacoes.length > 0 ? (
           <ScrollView style={styles.transactionsScroll}>
             <View style={[styles.transactionHeader, { borderBottomColor: tema.inputBorderColor }]}>
-              <Text style={[styles.headerText, { color: tema.textColor, flex: 0.8 }]}>Tipo</Text>
-              <Text style={[styles.headerText, { color: tema.textColor, flex: 1.5 }]}>Categoria</Text> {/* Ajustado flex */}
+              <Text style={[styles.headerText, { color: tema.textColor, flex: 1.6 }]}>Categoria</Text>
               <Text style={[styles.headerText, { color: tema.textColor, flex: 1, textAlign: 'right' }]}>Valor</Text>
-              <Text style={[styles.headerText, { color: tema.textColor, flex: 0.8, textAlign: 'right' }]}>Data</Text>
+              <Text style={[styles.headerText, { color: tema.textColor, flex: 0.9, textAlign: 'right' }]}>Data</Text>
             </View>
-            {transacoes.map((transacao, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.transactionItem,
-                  { borderBottomColor: tema.inputBorderColor },
-                  transacao.tipo === 'entrada' ? styles.transactionEntrada : styles.transactionSaida
-                ]}
-              >
-                <Text style={[styles.transactionType, { color: tema.textColor }]}>
-                  {transacao.tipo === 'entrada' ? 'Receita' : 'Despesa'}
-                </Text>
-                {/* Assumindo que a propriedade 'categoria' está disponível no objeto transacao */}
-                <Text style={[styles.transactionCategory, { color: tema.textColor }]}>
-                  {transacao.categoria || 'N/A'} {/* Exibe categoria ou 'N/A' */}
-                </Text>
-                <Text style={[styles.transactionValue, { color: tema.textColor, fontWeight: 'bold' }]}>
-                  {formatCurrency(transacao.valor)}
-                </Text>
-                <Text style={[styles.transactionDate, { color: tema.textSecondaryColor }]}>
-                  {new Date(transacao.datacad).toLocaleDateString('pt-BR')}
-                </Text>
-              </View>
-            ))}
+            {transacoes.map((t, index) => {
+              const isEntrada = t.tipo === 'entrada';
+              return (
+                <View
+                  key={index}
+                  style={[
+                    styles.transactionItem,
+                    { borderBottomColor: tema.inputBorderColor, backgroundColor: tema.sectionBoxBackground }
+                  ]}
+                >
+                  <Text style={[styles.transactionCategory, { color: tema.textColor }]}>
+                    {t.categoria || 'N/A'}
+                  </Text>
+
+                  <Text
+                    style={[
+                      styles.transactionValue,
+                      { color: isEntrada ? 'green' : 'red', fontWeight: 'bold' }
+                    ]}
+                  >
+                    {formatCurrency(t.valor)}
+                  </Text>
+
+                  <Text style={[styles.transactionDate, { color: tema.textSecondaryColor }]}>
+                    {new Date(t.datacad).toLocaleDateString('pt-BR')}
+                  </Text>
+                </View>
+              );
+            })}
           </ScrollView>
         ) : (
           <Text style={[styles.noDataText, { color: tema.textColor }]}>Nenhuma transação encontrada para este período.</Text>
         )}
       </View>
 
-      {/* Modal de Seleção de Grupo */}
+      {/* Modal: Grupo */}
       <Modal visible={modalGrupoVisivel} transparent animationType="slide">
         <View style={styles.modalContainer}>
           <View style={[styles.modalBox, { backgroundColor: tema.sectionBoxBackground }]}>
@@ -399,7 +526,7 @@ export default function RelatorioFinanceiro() {
                   key={grupo.chave}
                   onPress={async () => {
                     setGrupoSelecionado(grupo);
-                    await AsyncStorage.setItem("grupoSelecionado", String(grupo.chave)); // Salva o grupo selecionado
+                    await AsyncStorage.setItem("grupoSelecionado", String(grupo.chave));
                     setModalGrupoVisivel(false);
                   }}
                   style={[styles.modalItem, { borderBottomColor: tema.inputBorderColor }]}
@@ -412,7 +539,7 @@ export default function RelatorioFinanceiro() {
         </View>
       </Modal>
 
-      {/* Modal de Seleção de Data */}
+      {/* Modal: Data */}
       <Modal visible={modalDataVisivel} transparent animationType="fade">
         <View style={styles.modalContainer}>
           <View style={[styles.modalBox, { backgroundColor: tema.sectionBoxBackground }]}>
@@ -445,10 +572,7 @@ export default function RelatorioFinanceiro() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
+  container: { flex: 1, padding: 16 },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
@@ -456,10 +580,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-  },
+  loadingText: { marginTop: 10, fontSize: 16 },
   errorContainer: {
     padding: 15,
     borderRadius: 8,
@@ -467,28 +588,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'red',
   },
-  errorText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  errorHint: {
-    fontSize: 14,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
-  },
+  errorText: { fontSize: 16, fontWeight: 'bold', marginBottom: 5 },
+  errorHint: { fontSize: 14 },
+  title: { fontSize: 28, fontWeight: "bold", marginBottom: 20, textAlign: "center" },
   filtrosRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 16,
-    gap: 8, // Espaçamento entre os botões
+    gap: 8,
   },
   filtroBotao: {
-    flex: 1, // Para que os botões ocupem o espaço igualmente
+    flex: 1,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -496,11 +606,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  filtroTexto: {
-    fontSize: 14,
-    fontWeight: "500",
-    textAlign: 'center',
+  filtroTexto: { fontSize: 14, fontWeight: "500", textAlign: 'center' },
+
+  exportRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
   },
+  exportBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  exportBtnText: { color: "#fff", fontWeight: "bold" },
+
   cardTotais: {
     padding: 20,
     borderRadius: 16,
@@ -519,49 +642,23 @@ const styles = StyleSheet.create({
     width: '100%',
     marginBottom: 10,
   },
-  valorTotal: {
-    fontSize: 16,
-    flex: 1, // Para ocupar o espaço restante
-  },
-  valorSaldo: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  totaisBox: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-    marginTop: 10,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 15,
-    marginTop: 20,
-    textAlign: "center",
-  },
+  valorTotal: { fontSize: 16, flex: 1 },
+  valorSaldo: { fontSize: 28, fontWeight: "bold", marginBottom: 10 },
+  totaisBox: { flexDirection: "row", justifyContent: "space-between", width: "100%", marginTop: 10 },
+  sectionTitle: { fontSize: 20, fontWeight: "bold", marginBottom: 15, marginTop: 20, textAlign: "center" },
   chartContainer: {
     borderRadius: 16,
     padding: 16,
     marginBottom: 20,
-    alignItems: 'center', // Centraliza o gráfico
+    alignItems: 'center',
     elevation: 3,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
   },
-  chartTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  noDataText: {
-    textAlign: 'center',
-    paddingVertical: 20,
-    fontSize: 16,
-  },
+  chartTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
+  noDataText: { textAlign: 'center', paddingVertical: 20, fontSize: 16 },
   transactionsContainer: {
     borderRadius: 16,
     padding: 16,
@@ -572,57 +669,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
   },
-  transactionsScroll: {
-    maxHeight: 300, // Limita a altura para que a lista seja rolável
-  },
-  transactionHeader: { // Novo estilo para o cabeçalho da tabela de transações
+  transactionsScroll: { maxHeight: 300 },
+  transactionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderBottomWidth: 1,
     marginBottom: 5,
   },
-  headerText: { // Estilo para o texto do cabeçalho
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
+  headerText: { fontWeight: 'bold', fontSize: 14 },
   transactionItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderColor: '#eee', // Cor padrão da borda
+    borderColor: '#eee',
   },
-  transactionEntrada: {
-    backgroundColor: '#e6ffe6', // Verde claro para entradas
-  },
-  transactionSaida: {
-    backgroundColor: '#ffe6e6', // Vermelho claro para saídas
-  },
-  transactionType: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    flex: 0.8,
-  },
-  transactionCategory: { // Novo estilo para a categoria
-    fontSize: 14,
-    flex: 1.5, // Ajustado o flex para dar mais espaço à categoria
-  },
-  transactionDescription: { // Removido, pois a descrição não será mais exibida na tabela
-    // fontSize: 14, // Comentado/Removido
-    // flex: 1.5, // Comentado/Removido
-  },
-  transactionValue: {
-    fontSize: 14,
-    flex: 1,
-    textAlign: 'right',
-  },
-  transactionDate: {
-    fontSize: 12,
-    flex: 0.8,
-    textAlign: 'right',
-  },
+  transactionCategory: { fontSize: 14, flex: 1.6 },
+  transactionValue: { fontSize: 14, flex: 1, textAlign: 'right' },
+  transactionDate: { fontSize: 12, flex: 0.9, textAlign: 'right' },
   modalContainer: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -645,18 +711,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 15,
   },
-  modalTitulo: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  fecharBotao: {
-    fontSize: 22,
-    fontWeight: "bold",
-  },
-  modalItem: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
+  modalTitulo: { fontSize: 20, fontWeight: "bold" },
+  fecharBotao: { fontSize: 22, fontWeight: "bold" },
+  modalItem: { paddingVertical: 12, borderBottomWidth: 1 },
   mesSelector: {
     flexDirection: "row",
     justifyContent: "center",
@@ -664,30 +721,15 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 20,
   },
-  mesBotao: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  mesBotaoTexto: {
-    fontSize: 24,
-  },
-  mesAtual: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginHorizontal: 10,
-  },
-  toggleVisibilityButton: {
-    padding: 5,
-  },
+  mesBotao: { paddingHorizontal: 20, paddingVertical: 10 },
+  mesBotaoTexto: { fontSize: 24 },
+  mesAtual: { fontSize: 18, fontWeight: "bold", marginHorizontal: 10 },
+  toggleVisibilityButton: { padding: 5 },
   confirmButton: {
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 10,
   },
-  confirmButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
+  confirmButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 });
