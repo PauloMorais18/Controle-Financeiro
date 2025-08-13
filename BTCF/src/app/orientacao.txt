@@ -9,3 +9,5 @@ NOVO ---
 C:\Users\paulo\Documents\GitHub\Controle-Financeiro\BTCF>
 
 -> npx expo start
+
+npx expo start -c
