@@ -8,11 +8,13 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { useTheme } from "./ThemeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Feather } from '@expo/vector-icons'; // Importa ícones de olho aberto e fechado
+import { Feather } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 // --- Definições de Tipo para TypeScript ---
 type Transacao = {
@@ -22,6 +24,7 @@ type Transacao = {
   categoria: string; // Categoria da transação
   descricao: string;
   data: string;
+  taxajuros?: number; // Adicionando a propriedade opcional taxajuros
 };
 
 // Interface para a categoria retornada do backend (compartilhada com MovimentacaoEntrada)
@@ -32,16 +35,23 @@ interface Categoria {
   chaveusuario: number;
 }
 
+// NOVO: Interface para a resposta de erro
+interface ErrorResponse {
+  erro: string;
+}
+
 export default function MovimentacaoSaida() {
   const { tema } = useTheme();
-  const [valorRaw, setValorRaw] = useState<string>(""); // Valor bruto para cálculo
+  const [valorRaw, setValorRaw] = useState<number>(0); // Valor bruto para cálculo (agora como number)
   const [valorExibicao, setValorExibicao] = useState<string>("0,00"); // Valor formatado para exibição
+  const [taxaJuros, setTaxaJuros] = useState<string>("");
   const [tipo, setTipo] = useState<string>("avista");
   const [categoria, setCategoria] = useState<string>(""); // Estado para a categoria selecionada
   const [parcelas, setParcelas] = useState<string>("");
   const [valorParcela, setValorParcela] = useState<string>("");
   const [dataTermino, setDataTermino] = useState<string>("");
-  const [data, setData] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState<Date>(new Date()); // Mudou para objeto Date
+  const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
   const [descricao, setDescricao] = useState<string>("");
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -62,30 +72,14 @@ export default function MovimentacaoSaida() {
   const [networkError, setNetworkError] = useState<string | null>(null); // Novo estado para erros de rede
 
   // Função para formatar valores monetários (com ou sem asteriscos)
-  const formatCurrency = useCallback((value: any): string => {
-    if (value === null || value === undefined) {
-      return "R$ 0,00";
+  const formatCurrency = useCallback((value: number | null | undefined): string => {
+    if (value === null || value === undefined || isNaN(value) || !Number.isFinite(value)) {
+      value = 0;
     }
-
-    let numericValue: number;
-
-    if (typeof value === 'string') {
-      numericValue = parseFloat(value.replace(',', '.'));
-    } else if (typeof value === 'number') {
-      numericValue = value;
-    } else {
-      numericValue = 0; // Define como 0 para null, undefined ou outros tipos inesperados
-    }
-
-    if (isNaN(numericValue) || !Number.isFinite(numericValue)) {
-      numericValue = 0; // Garante que seja um número finito válido
-    }
-
     if (!showValues) {
       return "R$ *****";
     }
-
-    return `R$ ${numericValue.toFixed(2).replace('.', ',')}`;
+    return `R$ ${value.toFixed(2).replace('.', ',')}`;
   }, [showValues]);
 
   // Função para carregar o IP do servidor e o ID do usuário
@@ -101,7 +95,6 @@ export default function MovimentacaoSaida() {
         setLoading(false);
         return;
       }
-
       const userEmail = await AsyncStorage.getItem("usuarioEmail");
       if (userEmail && storedIp) {
         const userRes = await fetch(`${storedIp}/usuario/por-email/${userEmail}`);
@@ -163,24 +156,20 @@ export default function MovimentacaoSaida() {
 
   // Função para carregar categorias de SAÍDA do backend
   const carregarCategorias = useCallback(async () => {
-    if (!ipServidor || usuarioId === null) {
-      return;
-    }
+    if (!ipServidor || usuarioId === null) return;
     setNetworkError(null); // Limpa erros de rede anteriores
     try {
-      // Busca categorias do tipo 'saida'
       const response = await fetch(`${ipServidor}/categorias/${usuarioId}/saida`);
+      if (!response.ok) {
+        const errorData: ErrorResponse = await response.json();
+        throw new Error(errorData.erro || `Erro ao buscar categorias de saída: ${response.statusText || response.status}`);
+      }
       const data: Categoria[] = await response.json();
-      if (response.ok) {
-        setCategoriasDisponiveis(data);
-        // Define a primeira categoria como padrão se houver categorias
-        if (data.length > 0) {
-          setCategoria(data[0].nome_categoria);
-        } else {
-          setCategoria(""); // Nenhuma categoria disponível
-        }
+      setCategoriasDisponiveis(data);
+      if (data.length > 0) {
+        setCategoria(data[0].nome_categoria);
       } else {
-        throw new Error(data.erro || `Erro ao buscar categorias de saída: ${response.statusText || response.status}`);
+        setCategoria("");
       }
     } catch (err: any) {
       console.error("Erro ao carregar categorias de saída:", err.message);
@@ -213,9 +202,14 @@ export default function MovimentacaoSaida() {
       setNetworkError(null); // Limpa erros de rede anteriores
 
       const res = await fetch(`${ipServidor}/saida?chavepessoa=${chavepessoa}`);
+      
+      // CORREÇÃO: Lidar com a resposta de erro do servidor
+      if (!res.ok) {
+        const errorData: ErrorResponse = await res.json();
+        throw new Error(errorData.erro || `Erro ao buscar histórico: ${res.statusText || res.status}`);
+      }
+      
       const lista: any[] = await res.json(); // Use any[] para flexibilidade na resposta da API
-
-      if (!res.ok) throw new Error(lista.erro || `Erro ao buscar histórico: ${res.statusText || res.status}`);
 
       const dadosComCategoria: Transacao[] = lista.map(item => ({
         id: item.id || item.chave,
@@ -224,6 +218,7 @@ export default function MovimentacaoSaida() {
         categoria: item.categoria || "Não Definida",
         descricao: item.descricao || '',
         data: item.data || item.datacad || new Date().toISOString().slice(0, 10),
+        taxajuros: item.taxajuros || 0,
       }));
       setTransacoes(dadosComCategoria);
       await salvarHistoricoLocal(dadosComCategoria);
@@ -241,12 +236,16 @@ export default function MovimentacaoSaida() {
     }
   };
 
+  // Lógica para recalcular parcelas e data de término
   useEffect(() => {
-    if (tipo === "parcelado" && valorRaw && parcelas) {
+    if (tipo === "parcelado" && valorRaw > 0 && parcelas) {
       const qtd = parseInt(parcelas);
-      const val = parseFloat(valorRaw.replace(',', '.')); // Valor total
+      const val = valorRaw;
+      const juros = taxaJuros ? parseFloat(taxaJuros.replace(',', '.')) / 100 : 0;
       if (!isNaN(qtd) && qtd > 0 && !isNaN(val)) {
-        setValorParcela((val / qtd).toFixed(2));
+        // CORREÇÃO: Aplicando taxa de juros no valor total para calcular a parcela
+        const valorTotalComJuros = val * (1 + juros);
+        setValorParcela((valorTotalComJuros / qtd).toFixed(2));
         const fim = new Date(data);
         fim.setMonth(fim.getMonth() + qtd);
         setDataTermino(fim.toISOString().slice(0, 10));
@@ -258,25 +257,32 @@ export default function MovimentacaoSaida() {
       setValorParcela("");
       setDataTermino("");
     }
-  }, [tipo, valorRaw, parcelas, data]);
+  }, [tipo, valorRaw, parcelas, data, taxaJuros]);
 
-  // Atualiza o valor de exibição quando valorRaw muda
-  useEffect(() => {
-    setValorExibicao(formatarComoMoeda(valorRaw));
-  }, [valorRaw]);
+  // Handler para a entrada de valores, formatando em tempo real
+  const handleValorChange = (text: string) => {
+    // Permite apenas números e vírgula
+    const raw = text.replace(/[^0-9,]/g, "");
 
-  const formatarComoMoeda = (texto: string) => {
-    const numeros = texto.replace(/\D/g, "");
-    const inteiro = numeros.padStart(3, "0");
-    const valorNumerico = (parseInt(inteiro, 10) / 100).toFixed(2);
-    return valorNumerico.replace(".", ",");
+    // Substitui vírgula por ponto para o cálculo
+    const numericText = raw.replace(',', '.');
+
+    // Atualiza o estado de exibição (valor visível)
+    setValorExibicao(raw);
+
+    // Converte para número e atualiza o estado de valor bruto
+    if (numericText) {
+      setValorRaw(parseFloat(numericText));
+    } else {
+      setValorRaw(0);
+    }
   };
 
   const gerarDescricaoPadrao = (tipo: string, categoria: string, valorFormatado: string) =>
-    `Gasto ${categoria} ${tipo === "parcelado" ? "parcelado" : "à vista"} de R$ ${valorFormatado}`;
+    `Gasto ${categoria} ${tipo === "parcelado" ? "parcelado" : "à vista"} de ${valorFormatado}`;
 
   const handleSalvar = async () => {
-    if (!valorRaw || parseFloat(valorRaw.replace(',', '.')) <= 0) {
+    if (valorRaw <= 0) {
       Alert.alert("Erro", "O valor da saída deve ser maior que zero.");
       return;
     }
@@ -292,27 +298,34 @@ export default function MovimentacaoSaida() {
       Alert.alert("Erro", "Selecione uma categoria.");
       return;
     }
+    // NOVO: Validação para a taxa de juros
+    if ((tipo === 'credito' || tipo === 'parcelado') && (!taxaJuros.trim() || parseFloat(taxaJuros.replace(',', '.')) < 0)) {
+      Alert.alert("Erro", "A taxa de juros é obrigatória para transações a crédito ou parceladas.");
+      return;
+    }
+
 
     try {
       setLoading(true);
-      setNetworkError(null); // Limpa erros de rede anteriores
+      setNetworkError(null);
       if (!usuarioId || !ipServidor) throw new Error("Dados incompletos (usuário ou IP do servidor).");
 
-      const valorNumerico = parseFloat(valorRaw.replace(',', '.')); // Valor total
-      const valorParcelaNumerico = tipo === "parcelado" && valorParcela ? parseFloat(valorParcela.replace(',', '.')) : valorNumerico;
-      const dataFimParcelas = tipo === "parcelado" ? dataTermino : data;
-      const valorFormatado = formatarComoMoeda(valorRaw);
+      const valorParcelaNumerico = tipo === "parcelado" && valorParcela ? parseFloat(valorParcela) : valorRaw;
+      const dataFimParcelas = tipo === "parcelado" ? dataTermino : data.toISOString().slice(0, 10);
+      const valorFormatado = formatCurrency(valorRaw);
+      const taxaNumerica = (tipo === "credito" || tipo === "parcelado") ? parseFloat(taxaJuros.replace(',', '.') || '0') : 0;
 
       const body = {
         tipo,
-        categoria, // Envia a categoria para o backend
-        valor: valorNumerico,
+        categoria,
+        valor: valorRaw,
         descricao: descricao.trim() || gerarDescricaoPadrao(tipo, categoria, valorFormatado),
         qtdeparc: tipo === "parcelado" ? parseInt(parcelas) : 1,
         valorparc: valorParcelaNumerico,
         datafimparc: dataFimParcelas,
-        chavepessoa: usuarioId, // Já é um number aqui
+        chavepessoa: usuarioId,
         chavegrupo: grupoSelecionado,
+        taxajuros: taxaNumerica, // Incluindo taxajuros no body
       };
 
       console.log("📤 Enviando dados para API /saida:", body);
@@ -324,7 +337,6 @@ export default function MovimentacaoSaida() {
       });
 
       const resposta = await response.json();
-
       if (!response.ok) {
         console.error("❌ Erro na resposta da API:", resposta);
         throw new Error(resposta.erro || `Erro ao inserir saída: ${response.statusText || response.status}`);
@@ -334,9 +346,10 @@ export default function MovimentacaoSaida() {
         id: resposta.chave,
         valor: resposta.valor,
         tipo: resposta.tipo,
-        categoria: resposta.categoria, // Certifique-se de que o backend retorna a categoria
+        categoria: resposta.categoria,
         descricao: resposta.descricao,
         data: resposta.datacad,
+        taxajuros: resposta.taxajuros || 0,
       };
 
       const novaLista = [novaTransacao, ...transacoes];
@@ -344,15 +357,16 @@ export default function MovimentacaoSaida() {
       await salvarHistoricoLocal(novaLista);
 
       // Limpar formulário
-      setValorRaw("");
+      setValorRaw(0);
       setValorExibicao("0,00");
+      setTaxaJuros("");
       setTipo("avista");
-      setCategoria(categoriasDisponiveis.length > 0 ? categoriasDisponiveis[0].nome_categoria : ""); // Resetar para a primeira categoria disponível
+      setCategoria(categoriasDisponiveis.length > 0 ? categoriasDisponiveis[0].nome_categoria : "");
       setParcelas("");
       setValorParcela("");
       setDataTermino("");
       setDescricao("");
-      setData(new Date().toISOString().slice(0, 10));
+      setData(new Date());
 
       Alert.alert("✅ Sucesso", "Saída registrada com sucesso.");
     } catch (error: any) {
@@ -363,23 +377,38 @@ export default function MovimentacaoSaida() {
       setLoading(false);
     }
   };
+  
+  // Handlers para o DatePicker
+  const onChangeDate = (event: any, selectedDate: Date | undefined) => {
+    const currentDate = selectedDate || data;
+    setShowDatePicker(Platform.OS === 'ios');
+    setData(currentDate);
+  };
+  const showMode = () => {
+    setShowDatePicker(true);
+  };
 
   const renderItem = (item: Transacao) => (
     <View style={[styles.card, { backgroundColor: tema.sectionBoxBackground, borderColor: tema.inputBorderColor }]}>
       <View style={styles.cardRow}>
-        <Text style={[styles.cardType, { color: tema.textColor }]}>
-          {item.tipo === 'parcelado' ? 'Parcelado' : 'À Vista'}
+        <Text style={[styles.cardType, { color: tema.textColor, backgroundColor: tema.inputBorderColor, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5, overflow: 'hidden' }]}>
+          {item.tipo === 'parcelado' ? 'Parcelado' : (item.tipo === 'credito' ? 'Crédito' : (item.tipo === 'debito' ? 'Débito' : 'À Vista'))}
         </Text>
         <Text style={[styles.cardCategory, { color: tema.textColor }]}>
           {item.categoria}
         </Text>
-        <Text style={[styles.cardValue, { color: '#e53935' }]}> {/* Cor vermelha para saídas */}
+        <Text style={[styles.cardValue, { color: '#e53935' }]}>
           {formatCurrency(item.valor)}
         </Text>
       </View>
       <Text style={[styles.cardDescription, { color: tema.textSecondaryColor }]}>
         {item.descricao}
       </Text>
+      {item.taxajuros !== undefined && item.taxajuros > 0 && (
+        <Text style={[styles.cardDate, { color: tema.textSecondaryColor }]}>
+          Taxa de Juros: {item.taxajuros}%
+        </Text>
+      )}
       <Text style={[styles.cardDate, { color: tema.textSecondaryColor }]}>
         {new Date(item.data).toLocaleDateString("pt-BR")}
       </Text>
@@ -426,24 +455,31 @@ export default function MovimentacaoSaida() {
         placeholder="0,00"
         placeholderTextColor={tema.textSecondaryColor}
         value={valorExibicao}
-        onChangeText={(text) => {
-          const raw = text.replace(/\D/g, "");
-          setValorRaw(raw);
-        }}
+        onChangeText={handleValorChange}
       />
 
       <Text style={[styles.label, { color: tema.textColor }]}>Data</Text>
-      <TextInput
-        style={[styles.input, {
-          borderColor: tema.inputBorderColor,
-          backgroundColor: tema.inputBackground,
-          color: tema.textColor,
-        }]}
-        value={data}
-        onChangeText={setData}
-        placeholder="YYYY-MM-DD"
-        placeholderTextColor={tema.textSecondaryColor}
-      />
+      <TouchableOpacity onPress={showMode}>
+        <TextInput
+          style={[styles.input, {
+            borderColor: tema.inputBorderColor,
+            backgroundColor: tema.inputBackground,
+            color: tema.textColor,
+          }]}
+          value={data.toLocaleDateString('pt-BR')}
+          editable={false}
+          placeholder="DD/MM/AAAA"
+          placeholderTextColor={tema.textSecondaryColor}
+        />
+      </TouchableOpacity>
+      {showDatePicker && (
+        <DateTimePicker
+          value={data}
+          mode="date"
+          display="default"
+          onChange={onChangeDate}
+        />
+      )}
 
       <Text style={[styles.label, { color: tema.textColor }]}>Tipo da Transação</Text>
       <View style={[styles.pickerContainer, {
@@ -458,7 +494,6 @@ export default function MovimentacaoSaida() {
         </Picker>
       </View>
 
-      {/* --- CAMPO: CATEGORIA (AGORA DINÂMICO) --- */}
       <Text style={[styles.label, { color: tema.textColor }]}>Categoria</Text>
       <View style={[styles.pickerContainer, {
         borderColor: tema.inputBorderColor,
@@ -486,7 +521,27 @@ export default function MovimentacaoSaida() {
       >
         <Text style={[styles.botaoTexto, { color: tema.buttonTextColor }]}>🔄 Atualizar Categorias</Text>
       </TouchableOpacity>
-      {/* --- FIM CAMPO CATEGORIA --- */}
+
+      {(tipo === "credito" || tipo === "parcelado") && (
+        <>
+          <Text style={[styles.label, { color: tema.textColor }]}>Taxa de Juros (%)</Text>
+          <TextInput
+            style={[styles.input, {
+              borderColor: tema.inputBorderColor,
+              backgroundColor: tema.inputBackground,
+              color: tema.textColor,
+            }]}
+            keyboardType="numeric"
+            placeholder="Ex: 2.50"
+            placeholderTextColor={tema.textSecondaryColor}
+            value={taxaJuros}
+            onChangeText={(text) => {
+              const numericText = text.replace(/[^0-9,.]/g, '');
+              setTaxaJuros(numericText);
+            }}
+          />
+        </>
+      )}
 
       {tipo === "parcelado" && (
         <>
@@ -524,6 +579,7 @@ export default function MovimentacaoSaida() {
           borderColor: tema.inputBorderColor,
           backgroundColor: tema.inputBackground,
           color: tema.textColor,
+          height: 80,
         }]}
         value={descricao}
         onChangeText={setDescricao}
@@ -536,7 +592,7 @@ export default function MovimentacaoSaida() {
       <TouchableOpacity
         style={[styles.botaoSalvar, { backgroundColor: tema.linkColor }]}
         onPress={handleSalvar}
-        disabled={loading || !ipServidor || grupoSelecionado === null || !categoria || !valorRaw || parseFloat(valorRaw.replace(',', '.')) <= 0}
+        disabled={loading || !ipServidor || grupoSelecionado === null || !categoria || valorRaw <= 0}
       >
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.botaoTexto}>Salvar Saída</Text>}
       </TouchableOpacity>
@@ -574,7 +630,6 @@ export default function MovimentacaoSaida() {
       </View>
       <View style={{ padding: 24, paddingBottom: 100 }}>
         {renderFormulario()}
-
         <Text style={[styles.label, { color: tema.textColor, textAlign: 'center', marginTop: 30, fontSize: 18 }]}>
           Histórico de Saídas
         </Text>
@@ -598,7 +653,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10, // Aumentado para melhor toque
+    paddingVertical: 10,
     fontSize: 16,
     marginBottom: 8,
   },
@@ -607,8 +662,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
     overflow: 'hidden',
-    justifyContent: 'center', // Centraliza o conteúdo verticalmente
-    height: 50, // Altura fixa para o picker
+    justifyContent: 'center',
+    height: 50,
   },
   botaoAtualizar: {
     marginTop: 10,
@@ -616,12 +671,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
   },
-  botaoSalvar: { // Novo estilo para o botão de salvar
+  botaoSalvar: {
     marginTop: 30,
     paddingVertical: 15,
     borderRadius: 10,
     alignItems: "center",
-    elevation: 5, // Sombra para destaque
+    elevation: 5,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
@@ -630,10 +685,10 @@ const styles = StyleSheet.create({
   botaoTexto: { fontSize: 16, fontWeight: "bold", color: "#fff" },
   card: {
     padding: 16,
-    borderRadius: 10, // Bordas mais arredondadas
-    marginVertical: 6, // Espaçamento vertical
-    borderWidth: 1, // Adiciona borda
-    elevation: 2, // Sombra mais sutil
+    borderRadius: 10,
+    marginVertical: 6,
+    borderWidth: 1,
+    elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.18,
@@ -648,15 +703,10 @@ const styles = StyleSheet.create({
   cardType: {
     fontSize: 14,
     fontWeight: 'bold',
-    backgroundColor: '#e0e0e0', // Fundo para o tipo
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 5,
-    overflow: 'hidden', // Garante que o borderRadius funcione
   },
   cardCategory: {
     fontSize: 14,
-    flex: 1, // Ocupa o espaço restante
+    flex: 1,
     textAlign: 'center',
     marginHorizontal: 5,
   },

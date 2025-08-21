@@ -44,6 +44,7 @@ function DrawerWithTheme() {
   const { tema, temaEscuro } = useTheme();
   const pathname = usePathname();
 
+  // Oculta o Drawer nas rotas públicas
   const ocultarDrawer = pathname === "/" || pathname === "/Cadastro";
 
   if (ocultarDrawer) {
@@ -56,16 +57,13 @@ function DrawerWithTheme() {
         headerShown: true,
         drawerActiveTintColor: "#1976D2",
         drawerLabelStyle: { fontSize: 16, color: tema.textColor },
-        headerStyle: {
-          backgroundColor: temaEscuro ? "#333" : "#1976D2",
-        },
+        headerStyle: { backgroundColor: temaEscuro ? "#333" : "#1976D2" },
         headerTintColor: "#fff",
-        headerTitleStyle: {
-          fontWeight: "bold",
-        },
+        headerTitleStyle: { fontWeight: "bold" },
       }}
       drawerContent={(props) => <CustomDrawerContent {...props} />}
     >
+      {/* Os nomes abaixo DEVEM bater com os arquivos em src/app */}
       <Drawer.Screen name="Principal" options={{ title: "Principal" }} />
       <Drawer.Screen name="Perfil" options={{ title: "Perfil" }} />
       <Drawer.Screen name="Grupo" options={{ title: "Criar Grupo" }} />
@@ -73,6 +71,8 @@ function DrawerWithTheme() {
       <Drawer.Screen name="MovimentacaoEntrada" options={{ title: "Entrada" }} />
       <Drawer.Screen name="MovimentacaoSaida" options={{ title: "Saída" }} />
       <Drawer.Screen name="RelatorioFinanceiro" options={{ title: "Relatório" }} />
+      {/* NOVO: tela de investimentos */}
+      <Drawer.Screen name="Investimentos" options={{ title: "Investimentos" }} />
       <Drawer.Screen name="ServidorConfig" options={{ title: "Servidor" }} />
       <Drawer.Screen name="Configuracoes" options={{ title: "Configurações" }} />
     </Drawer>
@@ -88,10 +88,7 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
 
   const handleLogout = async () => {
     await AsyncStorage.removeItem("usuarioEmail");
-    navigation.reset({
-      index: 0,
-      routes: [{ name: "index" }],
-    });
+    navigation.reset({ index: 0, routes: [{ name: "index" }] });
   };
 
   return (
@@ -107,15 +104,15 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
 
       <View style={{ marginTop: 10 }}>
         <DrawerItem
-          label="👤 Perfil"
-          onPress={() => navigation.navigate("Perfil")}
+          label="📋 Principal"
+          onPress={() => navigation.navigate("Principal")}
           labelStyle={{ color: tema.textColor }}
           style={{ backgroundColor: itemBackgroundColor }}
           activeBackgroundColor={activeBackgroundColor}
         />
         <DrawerItem
-          label="📋 Principal"
-          onPress={() => navigation.navigate("Principal")}
+          label="👤 Perfil"
+          onPress={() => navigation.navigate("Perfil")}
           labelStyle={{ color: tema.textColor }}
           style={{ backgroundColor: itemBackgroundColor }}
           activeBackgroundColor={activeBackgroundColor}
@@ -155,9 +152,17 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
           style={{ backgroundColor: itemBackgroundColor }}
           activeBackgroundColor={activeBackgroundColor}
         />
+        {/* NOVO: item do menu para Investimentos */}
+        <DrawerItem
+          label="💹 Investimentos"
+          onPress={() => navigation.navigate("Investimentos")}
+          labelStyle={{ color: tema.textColor }}
+          style={{ backgroundColor: itemBackgroundColor }}
+          activeBackgroundColor={activeBackgroundColor}
+        />
         <DrawerItem
           label="🖥️ Servidor"
-          onPress={() => navigation.navigate("Servidorconfig")}
+          onPress={() => navigation.navigate("ServidorConfig")} // CORRIGIDO: nome da rota com 'C' maiúsculo
           labelStyle={{ color: tema.textColor }}
           style={{ backgroundColor: itemBackgroundColor }}
           activeBackgroundColor={activeBackgroundColor}

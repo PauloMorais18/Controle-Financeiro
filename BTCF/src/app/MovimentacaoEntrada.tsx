@@ -12,19 +12,19 @@ import {
 import { Picker } from "@react-native-picker/picker";
 import { useTheme } from "./ThemeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Feather } from '@expo/vector-icons'; // Importa ícones de olho aberto e fechado
+import { Feather } from '@expo/vector-icons';
 
 // --- Definições de Tipo para TypeScript ---
 type Transacao = {
   id: number;
   valor: number;
-  tipo: string; // Tipo de transação (avista, parcelado, etc.)
-  categoria: string; // Categoria da transação
+  tipo: string;
+  categoria: string;
   descricao: string;
   data: string;
+  taxajuros?: number;
 };
 
-// Interface para a categoria retornada do backend
 interface Categoria {
   chave: number;
   nome_categoria: string;
@@ -32,12 +32,17 @@ interface Categoria {
   chaveusuario: number;
 }
 
+// Interface para a resposta de erro
+interface ErrorResponse {
+  erro: string;
+}
+
 export default function MovimentacaoEntrada() {
   const { tema } = useTheme();
-  const [valorRaw, setValorRaw] = useState<string>(""); // Valor bruto para cálculo
+  const [valorRaw, setValorRaw] = useState<number>(0); // Valor bruto para cálculo (agora como number)
   const [valorExibicao, setValorExibicao] = useState<string>("0,00"); // Valor formatado para exibição
-  const [tipo, setTipo] = useState<string>("avista"); // Tipo de transação (à vista, parcelado, etc.)
-  const [categoria, setCategoria] = useState<string>(""); // Estado para a categoria selecionada (agora dinâmica)
+  const [tipo, setTipo] = useState<string>("avista");
+  const [categoria, setCategoria] = useState<string>("");
   const [parcelas, setParcelas] = useState<string>("");
   const [valorParcela, setValorParcela] = useState<string>("");
   const [dataTermino, setDataTermino] = useState<string>("");
@@ -49,47 +54,24 @@ export default function MovimentacaoEntrada() {
   const [grupoSelecionado, setGrupoSelecionado] = useState<number | null>(null);
   const CHAVE_HISTORICO = "historico_entradas";
 
-  // Estado para o IP do servidor e ID do usuário (carregados do AsyncStorage)
   const [ipServidor, setIpServidor] = useState<string | null>(null);
   const [usuarioId, setUsuarioId] = useState<number | null>(null);
-
-  // Estado para as categorias disponíveis (carregadas do backend)
   const [categoriasDisponiveis, setCategoriasDisponiveis] = useState<Categoria[]>([]);
-
-  // Novo estado para controlar a visibilidade dos valores
   const [showValues, setShowValues] = useState(true);
-
-  // Novo estado para a taxa de juros com valor padrão "0"
-  const [taxaJuros, setTaxaJuros] = useState<string>("0,00");
+  const [taxaJuros, setTaxaJuros] = useState<string>(""); // Novo estado para taxa de juros
 
   // Função para formatar valores monetários (com ou sem asteriscos)
   const formatCurrency = useCallback((value: any): string => {
-    if (value === null || value === undefined) {
-      return "R$ 0,00";
+    if (value === null || value === undefined || isNaN(value)) {
+      value = 0;
     }
-
-    let numericValue: number;
-
-    if (typeof value === 'string') {
-      numericValue = parseFloat(value.replace(',', '.'));
-    } else if (typeof value === 'number') {
-      numericValue = value;
-    } else {
-      numericValue = 0;
-    }
-
-    if (isNaN(numericValue)) {
-      numericValue = 0;
-    }
-
+    const numericValue = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
     if (!showValues) {
       return "R$ *****";
     }
-
     if (!Number.isFinite(numericValue)) {
       return "R$ 0,00";
     }
-
     return `R$ ${numericValue.toFixed(2).replace('.', ',')}`;
   }, [showValues]);
 
@@ -105,7 +87,6 @@ export default function MovimentacaoEntrada() {
         setLoading(false);
         return;
       }
-
       const userEmail = await AsyncStorage.getItem("usuarioEmail");
       if (userEmail && storedIp) {
         const userRes = await fetch(`${storedIp}/usuario/por-email/${userEmail}`);
@@ -131,7 +112,6 @@ export default function MovimentacaoEntrada() {
     }
   }, []);
 
-  // Carrega configurações iniciais ao montar o componente
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
@@ -143,7 +123,10 @@ export default function MovimentacaoEntrada() {
     }
     try {
       const gruposRes = await fetch(`${ipServidor}/grupo/usuario/${usuarioId}`);
-      if (!gruposRes.ok) throw new Error("Erro ao buscar grupos.");
+      if (!gruposRes.ok) {
+        const errorData: ErrorResponse = await gruposRes.json();
+        throw new Error(errorData.erro || "Erro ao buscar grupos.");
+      }
       const lista = await gruposRes.json();
       setGrupos(lista);
 
@@ -169,16 +152,16 @@ export default function MovimentacaoEntrada() {
     }
     try {
       const response = await fetch(`${ipServidor}/categorias/${usuarioId}/entrada`);
+      if (!response.ok) {
+        const errorData: ErrorResponse = await response.json();
+        throw new Error(errorData.erro || "Erro ao buscar categorias.");
+      }
       const data: Categoria[] = await response.json();
-      if (response.ok) {
-        setCategoriasDisponiveis(data);
-        if (data.length > 0) {
-          setCategoria(data[0].nome_categoria);
-        } else {
-          setCategoria("");
-        }
+      setCategoriasDisponiveis(data);
+      if (data.length > 0) {
+        setCategoria(data[0].nome_categoria);
       } else {
-        throw new Error(data.erro || "Erro ao buscar categorias.");
+        setCategoria("");
       }
     } catch (err: any) {
       console.error("Erro ao carregar categorias:", err.message);
@@ -186,7 +169,6 @@ export default function MovimentacaoEntrada() {
     }
   }, [ipServidor, usuarioId]);
 
-  // Carrega grupos e categorias quando IP e usuárioId estão disponíveis
   useEffect(() => {
     if (ipServidor && usuarioId !== null) {
       carregarGrupos();
@@ -194,22 +176,17 @@ export default function MovimentacaoEntrada() {
     }
   }, [ipServidor, usuarioId, carregarGrupos, carregarCategorias]);
 
-  // Carrega histórico do servidor após IP, usuárioId e grupo serem definidos
-  useEffect(() => {
-    if (ipServidor && usuarioId !== null && grupoSelecionado !== null) {
-      carregarHistoricoDoServidor();
-    }
-  }, [ipServidor, usuarioId, grupoSelecionado]);
-
   const carregarHistoricoDoServidor = async () => {
     try {
       if (!usuarioId || !ipServidor) throw new Error("Usuário ou IP não encontrado.");
-
       const response = await fetch(`${ipServidor}/entrada?chavepessoa=${usuarioId}`);
+      
+      if (!response.ok) {
+        const errorData: ErrorResponse = await response.json();
+        throw new Error(errorData.erro || "Erro ao buscar histórico.");
+      }
+      
       const dados: any[] = await response.json();
-
-      if (!response.ok) throw new Error(dados.erro || "Erro ao buscar histórico.");
-
       const dadosComCategoria: Transacao[] = dados.map(item => ({
         id: item.id || item.chave,
         valor: typeof item.valor === 'number' ? item.valor : parseFloat(item.valor?.replace(',', '.') || '0'),
@@ -217,11 +194,13 @@ export default function MovimentacaoEntrada() {
         categoria: item.categoria || "Não Definida",
         descricao: item.descricao || '',
         data: item.data || item.datacad || new Date().toISOString().slice(0, 10),
+        taxajuros: item.taxajuros || 0,
       }));
       setTransacoes(dadosComCategoria);
       await salvarHistoricoLocal(dadosComCategoria);
     } catch (err: any) {
       console.error("Erro ao carregar histórico do servidor:", err.message);
+      Alert.alert("Erro", err.message || "Erro ao carregar histórico.");
     }
   };
 
@@ -233,13 +212,13 @@ export default function MovimentacaoEntrada() {
     }
   };
 
+  // Lógica para recalcular parcelas e data de término
   useEffect(() => {
-    if (tipo === "parcelado" && valorRaw && parcelas) {
+    if (tipo === "parcelado" && valorRaw > 0 && parcelas) {
       const qtd = parseInt(parcelas);
-      const val = parseFloat(valorRaw.replace(',', '.'));
+      const val = valorRaw;
       const juros = taxaJuros ? parseFloat(taxaJuros.replace(',', '.')) / 100 : 0;
       if (!isNaN(qtd) && qtd > 0 && !isNaN(val)) {
-        // Cálculo do valor da parcela com juros simples
         const valorTotalComJuros = val * (1 + juros);
         setValorParcela((valorTotalComJuros / qtd).toFixed(2));
         const fim = new Date(data);
@@ -254,24 +233,28 @@ export default function MovimentacaoEntrada() {
       setDataTermino("");
     }
   }, [tipo, valorRaw, parcelas, data, taxaJuros]);
+  
+  // Handler para a entrada de valores, formatando em tempo real
+  const handleValorChange = (text: string) => {
+    // Permite apenas números e vírgula
+    const raw = text.replace(/[^0-9,]/g, "");
 
-  // Atualiza o valor de exibição quando valorRaw muda
-  useEffect(() => {
-    setValorExibicao(formatarComoMoeda(valorRaw));
-  }, [valorRaw]);
+    // Atualiza o estado de exibição (valor visível)
+    setValorExibicao(raw);
 
-  const formatarComoMoeda = (texto: string) => {
-    const numeros = texto.replace(/\D/g, "");
-    const inteiro = numeros.padStart(3, "0");
-    const valorNumerico = (parseInt(inteiro, 10) / 100).toFixed(2);
-    return valorNumerico.replace(".", ",");
+    // Converte para número e atualiza o estado de valor bruto
+    if (raw) {
+      setValorRaw(parseFloat(raw.replace(',', '.')));
+    } else {
+      setValorRaw(0);
+    }
   };
 
   const gerarDescricaoPadrao = (tipo: string, categoria: string, valorFormatado: string) =>
     `Ganho ${categoria} ${tipo === "parcelado" ? "parcelado" : "à vista"} de R$ ${valorFormatado}`;
 
   const handleSalvar = async () => {
-    if (!valorRaw || parseFloat(valorRaw.replace(',', '.')) <= 0) {
+    if (valorRaw <= 0) {
       Alert.alert("Erro", "O valor da entrada deve ser maior que zero.");
       return;
     }
@@ -287,20 +270,19 @@ export default function MovimentacaoEntrada() {
       Alert.alert("Erro", "Selecione uma categoria.");
       return;
     }
-    if (tipo === 'parcelado' && !taxaJuros.trim()) {
-        Alert.alert("Erro", "A taxa de juros é obrigatória para transações parceladas.");
-        return;
+    if (tipo === 'parcelado' && (!taxaJuros.trim() || parseFloat(taxaJuros.replace(',', '.')) < 0)) {
+      Alert.alert("Erro", "A taxa de juros é obrigatória para transações parceladas.");
+      return;
     }
-
 
     try {
       setLoading(true);
       if (!usuarioId || !ipServidor) throw new Error("Dados incompletos (usuário ou IP do servidor).");
 
-      const valorNumerico = parseFloat(valorRaw.replace(',', '.')); // Valor total
-      const valorParcelaNumerico = tipo === "parcelado" && valorParcela ? parseFloat(valorParcela.replace(',', '.')) : valorNumerico;
+      const valorNumerico = valorRaw;
+      const valorParcelaNumerico = tipo === "parcelado" && valorParcela ? parseFloat(valorParcela) : valorNumerico;
       const dataFimParcelas = tipo === "parcelado" ? dataTermino : data;
-      const valorFormatado = formatarComoMoeda(valorRaw);
+      const valorFormatado = formatCurrency(valorRaw);
       const taxaJurosNumerica = tipo === "parcelado" && taxaJuros ? parseFloat(taxaJuros.replace(',', '.')) : 0;
 
       const body = {
@@ -338,13 +320,14 @@ export default function MovimentacaoEntrada() {
         categoria: resposta.categoria,
         descricao: resposta.descricao,
         data: resposta.datacad,
+        taxajuros: resposta.taxajuros || 0,
       };
 
       const novaLista = [novaTransacao, ...transacoes];
       setTransacoes(novaLista);
       await salvarHistoricoLocal(novaLista);
 
-      setValorRaw("");
+      setValorRaw(0);
       setValorExibicao("0,00");
       setTipo("avista");
       setCategoria(categoriasDisponiveis.length > 0 ? categoriasDisponiveis[0].nome_categoria : "");
@@ -353,7 +336,7 @@ export default function MovimentacaoEntrada() {
       setDataTermino("");
       setDescricao("");
       setData(new Date().toISOString().slice(0, 10));
-      setTaxaJuros("0,00");
+      setTaxaJuros("");
 
       Alert.alert("✅ Sucesso", "Entrada registrada com sucesso.");
     } catch (error: any) {
@@ -366,23 +349,28 @@ export default function MovimentacaoEntrada() {
   const renderItem = ({ item }: { item: Transacao }) => (
     <View style={[styles.card, { backgroundColor: tema.sectionBoxBackground, borderColor: tema.inputBorderColor }]}>
       <View style={styles.cardRow}>
-        <Text style={[styles.cardType, { color: tema.textColor }]}>
-          {item.tipo === 'parcelado' ? 'Parcelado' : 'À Vista'}
-        </Text>
-        <Text style={[styles.cardCategory, { color: tema.textColor }]}>
-          {item.categoria}
-        </Text>
-        <Text style={[styles.cardValue, { color: tema.linkColor }]}>
-          {formatCurrency(item.valor)}
-        </Text>
-      </View>
-      <Text style={[styles.cardDescription, { color: tema.textSecondaryColor }]}>
-        {item.descricao}
+      <Text style={[styles.cardType, { color: tema.textColor, backgroundColor: tema.inputBorderColor, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5, overflow: 'hidden' }]}>
+        {item.tipo === 'parcelado' ? 'Parcelado' : 'À Vista'}
       </Text>
-      <Text style={[styles.cardDate, { color: tema.textSecondaryColor }]}>
-        {new Date(item.data).toLocaleDateString("pt-BR")}
+      <Text style={[styles.cardCategory, { color: tema.textColor }]}>
+        {item.categoria}
+      </Text>
+      <Text style={[styles.cardValue, { color: tema.linkColor }]}>
+        {formatCurrency(item.valor)}
       </Text>
     </View>
+    <Text style={[styles.cardDescription, { color: tema.textSecondaryColor }]}>
+      {item.descricao}
+    </Text>
+    {item.taxajuros && item.taxajuros > 0 && (
+      <Text style={[styles.cardDate, { color: tema.textSecondaryColor }]}>
+        Taxa de Juros: {item.taxajuros}%
+      </Text>
+    )}
+    <Text style={[styles.cardDate, { color: tema.textSecondaryColor }]}>
+      {new Date(item.data).toLocaleDateString("pt-BR")}
+    </Text>
+  </View>
   );
 
   function renderFormulario() {
@@ -425,10 +413,7 @@ export default function MovimentacaoEntrada() {
           placeholder="0,00"
           placeholderTextColor={tema.textSecondaryColor}
           value={valorExibicao}
-          onChangeText={(text) => {
-            const raw = text.replace(/\D/g, "");
-            setValorRaw(raw);
-          }}
+          onChangeText={handleValorChange}
         />
 
         <Text style={[styles.label, { color: tema.textColor }]}>Data</Text>
@@ -462,7 +447,6 @@ export default function MovimentacaoEntrada() {
           </Picker>
         </View>
 
-        {/* --- CAMPO: CATEGORIA (AGORA DINÂMICO) --- */}
         <Text style={[styles.label, { color: tema.textColor }]}>Categoria</Text>
         <View style={[styles.pickerContainer, {
           borderColor: tema.inputBorderColor,
@@ -490,7 +474,6 @@ export default function MovimentacaoEntrada() {
         >
           <Text style={[styles.botaoTexto, { color: tema.buttonTextColor }]}>🔄 Atualizar Categorias</Text>
         </TouchableOpacity>
-        {/* --- FIM CAMPO CATEGORIA --- */}
 
         {tipo === "parcelado" && (
           <>
@@ -508,7 +491,6 @@ export default function MovimentacaoEntrada() {
               onChangeText={setParcelas}
             />
 
-            {/* Adicionado: Campo para a taxa de juros */}
             <Text style={[styles.label, { color: tema.textColor }]}>Taxa de Juros (%)</Text>
             <TextInput
               style={[styles.input, {
@@ -516,11 +498,14 @@ export default function MovimentacaoEntrada() {
                 backgroundColor: tema.inputBackground,
                 color: tema.textColor,
               }]}
-              keyboardType="decimal-pad" // Alterado para 'decimal-pad' para melhor usabilidade
+              keyboardType="numeric"
               placeholder="Ex: 1,50"
               placeholderTextColor={tema.textSecondaryColor}
               value={taxaJuros}
-              onChangeText={(text) => setTaxaJuros(text.replace(/[^0-9,.]/g, ''))} // Permite números, vírgula e ponto
+              onChangeText={(text) => {
+                const numericText = text.replace(/[^0-9,]/g, '');
+                setTaxaJuros(numericText);
+              }}
             />
 
             <Text style={[styles.label, { color: tema.textColor }]}>Valor por Parcela</Text>
@@ -544,19 +529,20 @@ export default function MovimentacaoEntrada() {
             borderColor: tema.inputBorderColor,
             backgroundColor: tema.inputBackground,
             color: tema.textColor,
+            minHeight: 80,
           }]}
           value={descricao}
           onChangeText={setDescricao}
           placeholder="Ex: Salário do mês, Venda de item"
           placeholderTextColor={tema.textSecondaryColor}
           multiline
-          numberOfLines={3}
+          numberOfLines={4}
         />
 
         <TouchableOpacity
           style={[styles.botaoSalvar, { backgroundColor: tema.linkColor }]}
           onPress={handleSalvar}
-          disabled={loading || !ipServidor || grupoSelecionado === null || !categoria || !valorRaw || parseFloat(valorRaw.replace(',', '.')) <= 0}
+          disabled={loading || !ipServidor || grupoSelecionado === null || !categoria || valorRaw <= 0}
         >
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.botaoTexto}>Salvar Entrada</Text>}
         </TouchableOpacity>
@@ -566,7 +552,7 @@ export default function MovimentacaoEntrada() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: tema.backgroundColor }}>
-      {loading && ( // Usa o estado 'loading' para o overlay
+      {loading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={tema.linkColor} />
           <Text style={[styles.loadingText, { color: tema.textColor }]}>Carregando...</Text>
@@ -585,7 +571,6 @@ export default function MovimentacaoEntrada() {
       </View>
       <View style={{ padding: 24, paddingBottom: 100 }}>
         {renderFormulario()}
-
         <Text style={[styles.label, { color: tema.textColor, textAlign: 'center', marginTop: 30, fontSize: 18 }]}>
           Histórico de Entradas
         </Text>
