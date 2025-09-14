@@ -35,7 +35,7 @@ export default function Cadastro() {
   function irParaServidor() {
     animateButton(scaleServidor);
     setTimeout(() => {
-      router.push("/Servidorconfig");
+      router.push({ pathname: "/Servidorconfig" });
     }, 200);
   }
 
@@ -62,7 +62,7 @@ export default function Cadastro() {
       let ipServidor = await AsyncStorage.getItem("ipServidor");
 
       // fallback se não houver ip salvo
-      if (!ipServidor) ipServidor = "http://192.168.68.108:3000";
+      if (!ipServidor) ipServidor = "http://192.168.68.104:3000";
 
       const response = await fetch(`${ipServidor}/usuario`, {
         method: "POST",

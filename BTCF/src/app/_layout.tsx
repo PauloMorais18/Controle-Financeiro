@@ -73,7 +73,7 @@ function DrawerWithTheme() {
       <Drawer.Screen name="RelatorioFinanceiro" options={{ title: "Relatório" }} />
       {/* NOVO: tela de investimentos */}
       <Drawer.Screen name="Investimentos" options={{ title: "Investimentos" }} />
-      <Drawer.Screen name="ServidorConfig" options={{ title: "Servidor" }} />
+      <Drawer.Screen name="Servidorconfig" options={{ title: "Servidor" }} />
       <Drawer.Screen name="Configuracoes" options={{ title: "Configurações" }} />
     </Drawer>
   );
@@ -153,16 +153,16 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
           activeBackgroundColor={activeBackgroundColor}
         />
         {/* NOVO: item do menu para Investimentos */}
-        <DrawerItem
+        {/* <DrawerItem
           label="💹 Investimentos"
           onPress={() => navigation.navigate("Investimentos")}
           labelStyle={{ color: tema.textColor }}
           style={{ backgroundColor: itemBackgroundColor }}
           activeBackgroundColor={activeBackgroundColor}
-        />
+        /> */}
         <DrawerItem
           label="🖥️ Servidor"
-          onPress={() => navigation.navigate("ServidorConfig")} // CORRIGIDO: nome da rota com 'C' maiúsculo
+          onPress={() => navigation.navigate("Servidorconfig")} 
           labelStyle={{ color: tema.textColor }}
           style={{ backgroundColor: itemBackgroundColor }}
           activeBackgroundColor={activeBackgroundColor}

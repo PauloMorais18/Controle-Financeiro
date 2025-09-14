@@ -6,12 +6,34 @@ import {
   Alert,
   Pressable,
   Animated,
-  ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
+async function getBaseUrl(): Promise<string> {
+  let url = (await AsyncStorage.getItem("ipServidor"))?.trim() || "";
+  // Remover barra final e espaços
+  if (url.endsWith("/")) url = url.slice(0, -1);
+
+  // Fallback TEMPORÁRIO para teste (se não houver configuração salva)
+  if (!url) url = "http://192.168.68.104:3000";
+  return url;
+}
+
+async function ping(baseUrl: string, ms = 4000): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(`${baseUrl}/health`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    return r.ok;
+  } catch {
+    clearTimeout(timer);
+    return false;
+  }
+}
 
 export default function Login() {
   const router = useRouter();
@@ -24,13 +46,12 @@ export default function Login() {
   const scaleServidor = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    async function carregarCredenciaisSalvas() {
+    (async () => {
       const emailSalvo = await AsyncStorage.getItem("usuarioEmail");
       const senhaSalva = await AsyncStorage.getItem("usuarioSenha");
       if (emailSalvo) setEmail(emailSalvo);
       if (senhaSalva) setSenha(senhaSalva);
-    }
-    carregarCredenciaisSalvas();
+    })();
   }, []);
 
   function animateButton(scaleRef: Animated.Value) {
@@ -42,18 +63,27 @@ export default function Login() {
 
   async function handleLogin() {
     if (!email || !senha) {
-      return Alert.alert("Erro", "Preencha todos os campos");
+      return Alert.alert("Erro", "Preencha todos os campos.");
     }
 
     try {
       setLoading(true);
       animateButton(scale);
 
-      const ipServidor = await AsyncStorage.getItem("ipServidor");
-      if (!ipServidor) throw new Error("IP do servidor não configurado");
+      const baseUrl = await getBaseUrl();
+      // Exibe a URL base usada (útil para diagnóstico)
+      // Alert.alert("Base URL usada", baseUrl);
 
-      const apiUrl = `${ipServidor}/usuario/login`;
+      // Verifica conectividade com timeout
+      const ok = await ping(baseUrl, 4000);
+      if (!ok) {
+        return Alert.alert(
+          "Servidor inacessível",
+          "Não foi possível alcançar o servidor configurado. Verifique o IP/porta (ex.: http://192.168.68.104:3000), o firewall e se o servidor está em execução."
+        );
+      }
 
+      const apiUrl = `${baseUrl}/usuario/login`;
       const response = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -61,10 +91,14 @@ export default function Login() {
       });
 
       if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error("E-mail ou senha inválidos");
-        }
-        throw new Error("Erro ao tentar fazer login");
+        if (response.status === 401) throw new Error("E-mail ou senha inválidos.");
+        // tenta extrair mensagem do backend
+        let msg = "Erro ao tentar fazer login.";
+        try {
+          const j = await response.json();
+          if (j?.erro) msg = j.erro;
+        } catch {}
+        throw new Error(msg);
       }
 
       const usuario = await response.json();
@@ -72,15 +106,19 @@ export default function Login() {
       await AsyncStorage.setItem("usuarioEmail", email);
       await AsyncStorage.setItem("usuarioSenha", senha);
       await AsyncStorage.setItem("usuarioNome", usuario.nome);
-      await AsyncStorage.setItem("usuarioId", usuario.chave.toString());
+      await AsyncStorage.setItem("usuarioId", String(usuario.chave));
 
-      setTimeout(() => {
-        Alert.alert("✅ Login feito!", `Bem-vindo(a), ${usuario.nome}`);
-        router.replace("/Principal");
-      }, 300);
-    } catch (error: any) {
-      console.error(error);
-      Alert.alert("Erro", error.message);
+      Alert.alert("✅ Login realizado", `Bem-vindo(a), ${usuario.nome}`);
+      router.replace("/Principal");
+    } catch (e: any) {
+      const msg =
+        e?.name === "AbortError"
+          ? "Tempo esgotado ao contatar o servidor."
+          : e?.message === "Network request failed"
+          ? "Falha de rede. Confirme o IP/porta, a conexão do aparelho ao mesmo Wi-Fi do servidor e o firewall."
+          : e?.message || "Erro desconhecido.";
+      Alert.alert("Erro", msg);
+      console.error("Login error:", e);
     } finally {
       setLoading(false);
     }
@@ -88,16 +126,13 @@ export default function Login() {
 
   function handleCadastro() {
     animateButton(scaleCadastro);
-    setTimeout(() => {
-      router.push("/Cadastro");
-    }, 200);
+    setTimeout(() => router.push("/Cadastro"), 200);
   }
 
   function handleServidor() {
-    console.log("Botão de servidor clicado");
     animateButton(scaleServidor);
     setTimeout(() => {
-      router.push("/Servidorconfig");
+      router.push({ pathname: "/Servidorconfig" });
     }, 200);
   }
 
@@ -127,9 +162,7 @@ export default function Login() {
           onPress={handleLogin}
           disabled={!email || !senha || loading}
         >
-          <Text style={styles.botaoTexto}>
-            {loading ? "Entrando..." : "Entrar"}
-          </Text>
+          <Text style={styles.botaoTexto}>{loading ? "Entrando..." : "Entrar"}</Text>
         </TouchableOpacity>
       </Animated.View>
 

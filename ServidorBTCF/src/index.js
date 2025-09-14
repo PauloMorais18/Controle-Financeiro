@@ -5,6 +5,20 @@ const pool = require('./db'); // Certifique-se de que seu arquivo db.js está co
 const app = express();
 const PORT = 3000;
 
+const os = require('os');
+
+function getLocalIp() {
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    for (const iface of ifaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
+    }
+  }
+  return 'localhost';
+}
+
+app.get('/health', (req, res) => res.status(200).send('ok'));
+
 app.use(cors());
 app.use(express.json());
 
@@ -718,7 +732,13 @@ app.get('/grupo/:grupoId/membros', async (req, res) => {
 });
 
 // ===== INICIAR SERVIDOR =====
+// app.listen(PORT, '0.0.0.0', () => {
+//   console.log(`🟢 Servidor BTCF rodando na porta ${PORT}`);
+//   console.log(`     Acesse via: http://localhost:${PORT}`);
+// });
+
 app.listen(PORT, '0.0.0.0', () => {
+  const ip = getLocalIp();
   console.log(`🟢 Servidor BTCF rodando na porta ${PORT}`);
-  console.log(`     Acesse via: http://localhost:${PORT}`);
+  console.log(`     Acesse via: http://${ip}:${PORT}`);
 });
