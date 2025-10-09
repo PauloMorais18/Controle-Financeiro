@@ -14,10 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 async function getBaseUrl(): Promise<string> {
   let url = (await AsyncStorage.getItem("ipServidor"))?.trim() || "";
-  // Remover barra final e espaços
   if (url.endsWith("/")) url = url.slice(0, -1);
-
-  // Fallback TEMPORÁRIO para teste (se não houver configuração salva)
   if (!url) url = "http://192.168.68.104:3000";
   return url;
 }
@@ -29,7 +26,7 @@ async function ping(baseUrl: string, ms = 4000): Promise<boolean> {
     const r = await fetch(`${baseUrl}/health`, { signal: ctrl.signal });
     clearTimeout(timer);
     return r.ok;
-  } catch {
+  } catch (err) {
     clearTimeout(timer);
     return false;
   }
@@ -47,11 +44,16 @@ export default function Login() {
 
   useEffect(() => {
     (async () => {
-      const emailSalvo = await AsyncStorage.getItem("usuarioEmail");
-      const senhaSalva = await AsyncStorage.getItem("usuarioSenha");
-      if (emailSalvo) setEmail(emailSalvo);
-      if (senhaSalva) setSenha(senhaSalva);
+      try {
+        const emailSalvo = await AsyncStorage.getItem("usuarioEmail");
+        const senhaSalva = await AsyncStorage.getItem("usuarioSenha");
+        if (emailSalvo) setEmail(emailSalvo);
+        if (senhaSalva) setSenha(senhaSalva);
+      } catch (e) {
+        console.warn("[Login] erro ao recuperar credenciais:", e);
+      }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function animateButton(scaleRef: Animated.Value) {
@@ -71,15 +73,14 @@ export default function Login() {
       animateButton(scale);
 
       const baseUrl = await getBaseUrl();
-      // Exibe a URL base usada (útil para diagnóstico)
-      // Alert.alert("Base URL usada", baseUrl);
+      console.log("[Login] baseUrl usada:", baseUrl);
 
-      // Verifica conectividade com timeout
       const ok = await ping(baseUrl, 4000);
+      console.log("[Login] ping result:", ok);
       if (!ok) {
         return Alert.alert(
           "Servidor inacessível",
-          "Não foi possível alcançar o servidor configurado. Verifique o IP/porta (ex.: http://192.168.68.104:3000), o firewall e se o servidor está em execução."
+          "Não foi possível alcançar o servidor configurado. Verifique o IP/porta, o firewall e se o servidor está em execução."
         );
       }
 
@@ -92,7 +93,6 @@ export default function Login() {
 
       if (!response.ok) {
         if (response.status === 401) throw new Error("E-mail ou senha inválidos.");
-        // tenta extrair mensagem do backend
         let msg = "Erro ao tentar fazer login.";
         try {
           const j = await response.json();
@@ -117,8 +117,8 @@ export default function Login() {
           : e?.message === "Network request failed"
           ? "Falha de rede. Confirme o IP/porta, a conexão do aparelho ao mesmo Wi-Fi do servidor e o firewall."
           : e?.message || "Erro desconhecido.";
-      Alert.alert("Erro", msg);
       console.error("Login error:", e);
+      Alert.alert("Erro", msg);
     } finally {
       setLoading(false);
     }
@@ -132,7 +132,8 @@ export default function Login() {
   function handleServidor() {
     animateButton(scaleServidor);
     setTimeout(() => {
-      router.push({ pathname: "/Servidorconfig" });
+      console.log("[Login] navegar -> /servidorconfig");
+      router.push("/servidorconfig");
     }, 200);
   }
 
