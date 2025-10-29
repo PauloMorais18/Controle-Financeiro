@@ -12,7 +12,7 @@ import {
 import { Picker } from "@react-native-picker/picker";
 import { useTheme } from "./ThemeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Feather } from '@expo/vector-icons';
+import { Feather } from "@expo/vector-icons";
 
 // --- Definições de Tipo para TypeScript ---
 type Transacao = {
@@ -28,26 +28,32 @@ type Transacao = {
 interface Categoria {
   chave: number;
   nome_categoria: string;
-  tipo_transacao: 'entrada' | 'saida';
+  tipo_transacao: "entrada" | "saida";
   chaveusuario: number;
 }
 
-// Interface para a resposta de erro
+// Interface para a resposta de erro da API
 interface ErrorResponse {
   erro: string;
 }
 
 export default function MovimentacaoEntrada() {
   const { tema } = useTheme();
-  const [valorRaw, setValorRaw] = useState<number>(0); // Valor bruto para cálculo (agora como number)
-  const [valorExibicao, setValorExibicao] = useState<string>("0,00"); // Valor formatado para exibição
+
+  // Estados do formulário
+  const [valorRaw, setValorRaw] = useState<number>(0); // número puro para cálculos
+  const [valorExibicao, setValorExibicao] = useState<string>(""); // texto no input
   const [tipo, setTipo] = useState<string>("avista");
   const [categoria, setCategoria] = useState<string>("");
   const [parcelas, setParcelas] = useState<string>("");
   const [valorParcela, setValorParcela] = useState<string>("");
   const [dataTermino, setDataTermino] = useState<string>("");
-  const [data, setData] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState<string>(
+    new Date().toISOString().slice(0, 10)
+  );
   const [descricao, setDescricao] = useState<string>("");
+
+  // Estados auxiliares
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [grupos, setGrupos] = useState<any[]>([]);
@@ -56,26 +62,38 @@ export default function MovimentacaoEntrada() {
 
   const [ipServidor, setIpServidor] = useState<string | null>(null);
   const [usuarioId, setUsuarioId] = useState<number | null>(null);
-  const [categoriasDisponiveis, setCategoriasDisponiveis] = useState<Categoria[]>([]);
+  const [categoriasDisponiveis, setCategoriasDisponiveis] = useState<
+    Categoria[]
+  >([]);
   const [showValues, setShowValues] = useState(true);
-  const [taxaJuros, setTaxaJuros] = useState<string>(""); // Novo estado para taxa de juros
 
-  // Função para formatar valores monetários (com ou sem asteriscos)
-  const formatCurrency = useCallback((value: any): string => {
-    if (value === null || value === undefined || isNaN(value)) {
-      value = 0;
-    }
-    const numericValue = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
-    if (!showValues) {
-      return "R$ *****";
-    }
-    if (!Number.isFinite(numericValue)) {
-      return "R$ 0,00";
-    }
-    return `R$ ${numericValue.toFixed(2).replace('.', ',')}`;
-  }, [showValues]);
+  // Taxa de juros digitada (ex.: "15", "1,5", "2.75")
+  const [taxaJuros, setTaxaJuros] = useState<string>("");
 
-  // Função para carregar o IP do servidor e o ID do usuário
+  // -------- formatador de moeda no card --------
+  const formatCurrency = useCallback(
+    (value: any): string => {
+      if (value === null || value === undefined || isNaN(value)) {
+        value = 0;
+      }
+      const numericValue =
+        typeof value === "string"
+          ? parseFloat(value.replace(",", "."))
+          : value;
+
+      if (!showValues) {
+        return "R$ *****";
+      }
+      if (!Number.isFinite(numericValue)) {
+        return "R$ 0,00";
+      }
+
+      return `R$ ${numericValue.toFixed(2).replace(".", ",")}`;
+    },
+    [showValues]
+  );
+
+  // -------- carregar config inicial: IP servidor + usuário --------
   const loadConfig = useCallback(async () => {
     setLoading(true);
     try {
@@ -83,30 +101,45 @@ export default function MovimentacaoEntrada() {
       if (storedIp) {
         setIpServidor(storedIp);
       } else {
-        Alert.alert("Erro", "IP do servidor não configurado. Por favor, configure o IP na tela de configurações.");
+        Alert.alert(
+          "Erro",
+          "IP do servidor não configurado. Por favor, configure o IP na tela de configurações."
+        );
         setLoading(false);
         return;
       }
+
       const userEmail = await AsyncStorage.getItem("usuarioEmail");
       if (userEmail && storedIp) {
-        const userRes = await fetch(`${storedIp}/usuario/por-email/${userEmail}`);
+        const userRes = await fetch(
+          `${storedIp}/usuario/por-email/${userEmail}`
+        );
         if (userRes.ok) {
           const userData = await userRes.json();
           setUsuarioId(userData.chave);
           await AsyncStorage.setItem("usuarioId", String(userData.chave));
         } else {
-          Alert.alert("Erro", "Não foi possível obter o ID do usuário. Faça login novamente.");
+          Alert.alert(
+            "Erro",
+            "Não foi possível obter o ID do usuário. Faça login novamente."
+          );
           setLoading(false);
           return;
         }
       } else {
-        Alert.alert("Erro", "ID do usuário ou Email não encontrado. Por favor, faça login novamente.");
+        Alert.alert(
+          "Erro",
+          "ID do usuário ou Email não encontrado. Por favor, faça login novamente."
+        );
         setLoading(false);
         return;
       }
     } catch (err: any) {
       console.error("Erro ao carregar configurações:", err.message);
-      Alert.alert("Erro", "Não foi possível obter as configurações iniciais.");
+      Alert.alert(
+        "Erro",
+        "Não foi possível obter as configurações iniciais."
+      );
     } finally {
       setLoading(false);
     }
@@ -116,13 +149,15 @@ export default function MovimentacaoEntrada() {
     loadConfig();
   }, [loadConfig]);
 
-  // Função para carregar grupos do backend
+  // -------- carregar grupos --------
   const carregarGrupos = useCallback(async () => {
     if (!ipServidor || usuarioId === null) {
       return;
     }
     try {
-      const gruposRes = await fetch(`${ipServidor}/grupo/usuario/${usuarioId}`);
+      const gruposRes = await fetch(
+        `${ipServidor}/grupo/usuario/${usuarioId}`
+      );
       if (!gruposRes.ok) {
         const errorData: ErrorResponse = await gruposRes.json();
         throw new Error(errorData.erro || "Erro ao buscar grupos.");
@@ -131,27 +166,39 @@ export default function MovimentacaoEntrada() {
       setGrupos(lista);
 
       const grupoSalvo = await AsyncStorage.getItem("grupoSelecionado");
-      const grupoValido = grupoSalvo && lista.some((g: any) => g.chave === parseInt(grupoSalvo));
-      const grupoId = grupoValido ? parseInt(grupoSalvo!) : lista[0]?.chave;
+      const grupoValido =
+        grupoSalvo &&
+        lista.some((g: any) => g.chave === parseInt(grupoSalvo as string, 10));
+      const grupoId = grupoValido
+        ? parseInt(grupoSalvo as string, 10)
+        : lista[0]?.chave;
 
       if (!grupoId) {
-        Alert.alert("Atenção", "Você ainda não faz parte de nenhum grupo.");
+        Alert.alert(
+          "Atenção",
+          "Você ainda não faz parte de nenhum grupo."
+        );
         return;
       }
       setGrupoSelecionado(grupoId);
     } catch (err: any) {
       console.error("Erro ao carregar grupos:", err);
-      Alert.alert("Erro ao carregar grupos", err.message || "Erro desconhecido.");
+      Alert.alert(
+        "Erro ao carregar grupos",
+        err.message || "Erro desconhecido."
+      );
     }
   }, [ipServidor, usuarioId]);
 
-  // Função para carregar categorias do backend
+  // -------- carregar categorias --------
   const carregarCategorias = useCallback(async () => {
     if (!ipServidor || usuarioId === null) {
       return;
     }
     try {
-      const response = await fetch(`${ipServidor}/categorias/${usuarioId}/entrada`);
+      const response = await fetch(
+        `${ipServidor}/categorias/${usuarioId}/entrada`
+      );
       if (!response.ok) {
         const errorData: ErrorResponse = await response.json();
         throw new Error(errorData.erro || "Erro ao buscar categorias.");
@@ -165,7 +212,10 @@ export default function MovimentacaoEntrada() {
       }
     } catch (err: any) {
       console.error("Erro ao carregar categorias:", err.message);
-      Alert.alert("Erro", "Não foi possível carregar as categorias personalizadas.");
+      Alert.alert(
+        "Erro",
+        "Não foi possível carregar as categorias personalizadas."
+      );
     }
   }, [ipServidor, usuarioId]);
 
@@ -176,26 +226,38 @@ export default function MovimentacaoEntrada() {
     }
   }, [ipServidor, usuarioId, carregarGrupos, carregarCategorias]);
 
+  // -------- histórico do servidor (mantido, pode ser chamado em botão futuro) --------
   const carregarHistoricoDoServidor = async () => {
     try {
-      if (!usuarioId || !ipServidor) throw new Error("Usuário ou IP não encontrado.");
-      const response = await fetch(`${ipServidor}/entrada?chavepessoa=${usuarioId}`);
-      
+      if (!usuarioId || !ipServidor)
+        throw new Error("Usuário ou IP não encontrado.");
+
+      const response = await fetch(
+        `${ipServidor}/entrada?chavepessoa=${usuarioId}`
+      );
+
       if (!response.ok) {
         const errorData: ErrorResponse = await response.json();
         throw new Error(errorData.erro || "Erro ao buscar histórico.");
       }
-      
+
       const dados: any[] = await response.json();
-      const dadosComCategoria: Transacao[] = dados.map(item => ({
+      const dadosComCategoria: Transacao[] = dados.map((item) => ({
         id: item.id || item.chave,
-        valor: typeof item.valor === 'number' ? item.valor : parseFloat(item.valor?.replace(',', '.') || '0'),
-        tipo: item.tipo || '',
+        valor:
+          typeof item.valor === "number"
+            ? item.valor
+            : parseFloat(item.valor?.replace(",", ".") || "0"),
+        tipo: item.tipo || "",
         categoria: item.categoria || "Não Definida",
-        descricao: item.descricao || '',
-        data: item.data || item.datacad || new Date().toISOString().slice(0, 10),
+        descricao: item.descricao || "",
+        data:
+          item.data ||
+          item.datacad ||
+          new Date().toISOString().slice(0, 10),
         taxajuros: item.taxajuros || 0,
       }));
+
       setTransacoes(dadosComCategoria);
       await salvarHistoricoLocal(dadosComCategoria);
     } catch (err: any) {
@@ -212,15 +274,23 @@ export default function MovimentacaoEntrada() {
     }
   };
 
-  // Lógica para recalcular parcelas e data de término
+  // -------- cálculo de parcelas / fim do parcelamento --------
   useEffect(() => {
     if (tipo === "parcelado" && valorRaw > 0 && parcelas) {
-      const qtd = parseInt(parcelas);
+      const qtd = parseInt(parcelas, 10);
       const val = valorRaw;
-      const juros = taxaJuros ? parseFloat(taxaJuros.replace(',', '.')) / 100 : 0;
+
+      // taxaJuros pode ser "15", "1,5", "1.5"
+      const jurosFloat = taxaJuros
+        ? parseFloat(taxaJuros.replace(",", "."))
+        : 0;
+
+      const juros = jurosFloat > 0 ? jurosFloat / 100 : 0;
+
       if (!isNaN(qtd) && qtd > 0 && !isNaN(val)) {
         const valorTotalComJuros = val * (1 + juros);
         setValorParcela((valorTotalComJuros / qtd).toFixed(2));
+
         const fim = new Date(data);
         fim.setMonth(fim.getMonth() + qtd);
         setDataTermino(fim.toISOString().slice(0, 10));
@@ -233,32 +303,45 @@ export default function MovimentacaoEntrada() {
       setDataTermino("");
     }
   }, [tipo, valorRaw, parcelas, data, taxaJuros]);
-  
-  // Handler para a entrada de valores, formatando em tempo real
+
+  // -------- handler do campo Valor da Entrada --------
   const handleValorChange = (text: string) => {
-    // Permite apenas números e vírgula
-    const raw = text.replace(/[^0-9,]/g, "");
+    // permite apenas números e vírgula
+    const apenasPermitidos = text.replace(/[^0-9,]/g, "");
 
-    // Atualiza o estado de exibição (valor visível)
-    setValorExibicao(raw);
+    // atualiza texto que aparece no input
+    setValorExibicao(apenasPermitidos);
 
-    // Converte para número e atualiza o estado de valor bruto
-    if (raw) {
-      setValorRaw(parseFloat(raw.replace(',', '.')));
+    // converte vírgula para ponto e atualiza número bruto
+    if (apenasPermitidos.trim() !== "") {
+      const numero = parseFloat(apenasPermitidos.replace(",", "."));
+      if (!isNaN(numero)) {
+        setValorRaw(numero);
+      } else {
+        setValorRaw(0);
+      }
     } else {
       setValorRaw(0);
     }
   };
 
-  const gerarDescricaoPadrao = (tipo: string, categoria: string, valorFormatado: string) =>
-    `Ganho ${categoria} ${tipo === "parcelado" ? "parcelado" : "à vista"} de R$ ${valorFormatado}`;
+  // -------- handler do campo Taxa de Juros (%) --------
+  const handleTaxaChange = (text: string) => {
+    // permite dígitos, vírgula e ponto
+    const limpo = text.replace(/[^0-9.,]/g, "");
 
+    // substitui múltiplos pontos/vírgulas extras no final? vamos apenas aceitar livre,
+    // e confiar no parseFloat(limpo.replace(",", ".")) depois.
+    setTaxaJuros(limpo);
+  };
+
+  // -------- salvamento --------
   const handleSalvar = async () => {
     if (valorRaw <= 0) {
       Alert.alert("Erro", "O valor da entrada deve ser maior que zero.");
       return;
     }
-    if (tipo === "parcelado" && (!parcelas || parseInt(parcelas) <= 0)) {
+    if (tipo === "parcelado" && (!parcelas || parseInt(parcelas, 10) <= 0)) {
       Alert.alert("Erro", "Preencha corretamente o número de parcelas.");
       return;
     }
@@ -270,32 +353,56 @@ export default function MovimentacaoEntrada() {
       Alert.alert("Erro", "Selecione uma categoria.");
       return;
     }
-    if (tipo === 'parcelado' && (!taxaJuros.trim() || parseFloat(taxaJuros.replace(',', '.')) < 0)) {
-      Alert.alert("Erro", "A taxa de juros é obrigatória para transações parceladas.");
+    if (
+      tipo === "parcelado" &&
+      (!taxaJuros.trim() ||
+        parseFloat(taxaJuros.replace(",", ".")) < 0)
+    ) {
+      Alert.alert(
+        "Erro",
+        "A taxa de juros é obrigatória para transações parceladas."
+      );
       return;
     }
 
     try {
       setLoading(true);
-      if (!usuarioId || !ipServidor) throw new Error("Dados incompletos (usuário ou IP do servidor).");
+      if (!usuarioId || !ipServidor)
+        throw new Error(
+          "Dados incompletos (usuário ou IP do servidor)."
+        );
 
       const valorNumerico = valorRaw;
-      const valorParcelaNumerico = tipo === "parcelado" && valorParcela ? parseFloat(valorParcela) : valorNumerico;
-      const dataFimParcelas = tipo === "parcelado" ? dataTermino : data;
-      const valorFormatado = formatCurrency(valorRaw);
-      const taxaJurosNumerica = tipo === "parcelado" && taxaJuros ? parseFloat(taxaJuros.replace(',', '.')) : 0;
+      const valorParcelaNumerico =
+        tipo === "parcelado" && valorParcela
+          ? parseFloat(valorParcela)
+          : valorNumerico;
+
+      const dataFimParcelas =
+        tipo === "parcelado" ? dataTermino : data;
+
+      // taxa de juros numérica pura
+      const taxaJurosNumerica =
+        tipo === "parcelado" && taxaJuros
+          ? parseFloat(taxaJuros.replace(",", "."))
+          : 0;
+
+      // OBS: agora NÃO geramos descrição padrão automática.
+      // Enviamos exatamente o que o usuário escreveu,
+      // podendo ir string vazia.
+      const descricaoFinal = descricao.trim();
 
       const body = {
         tipo,
         categoria,
         valor: valorNumerico,
-        descricao: descricao.trim() || gerarDescricaoPadrao(tipo, categoria, valorFormatado),
-        qtdeparc: tipo === "parcelado" ? parseInt(parcelas) : 1,
+        descricao: descricaoFinal,
+        qtdeparc: tipo === "parcelado" ? parseInt(parcelas, 10) : 1,
         valorparc: valorParcelaNumerico,
         datafimparc: dataFimParcelas,
         chavepessoa: usuarioId,
         chavegrupo: grupoSelecionado,
-        taxajuros: taxaJurosNumerica
+        taxajuros: taxaJurosNumerica,
       };
 
       console.log("📤 Enviando dados para API /entrada:", body);
@@ -313,12 +420,13 @@ export default function MovimentacaoEntrada() {
         throw new Error(resposta.erro || "Erro ao inserir entrada");
       }
 
+      // Monta transação para histórico local
       const novaTransacao: Transacao = {
         id: resposta.chave,
         valor: resposta.valor,
         tipo: resposta.tipo,
         categoria: resposta.categoria,
-        descricao: resposta.descricao,
+        descricao: resposta.descricao || "", // pode vir vazio
         data: resposta.datacad,
         taxajuros: resposta.taxajuros || 0,
       };
@@ -327,10 +435,15 @@ export default function MovimentacaoEntrada() {
       setTransacoes(novaLista);
       await salvarHistoricoLocal(novaLista);
 
+      // limpar formulário
       setValorRaw(0);
-      setValorExibicao("0,00");
+      setValorExibicao("");
       setTipo("avista");
-      setCategoria(categoriasDisponiveis.length > 0 ? categoriasDisponiveis[0].nome_categoria : "");
+      setCategoria(
+        categoriasDisponiveis.length > 0
+          ? categoriasDisponiveis[0].nome_categoria
+          : ""
+      );
       setParcelas("");
       setValorParcela("");
       setDataTermino("");
@@ -346,38 +459,89 @@ export default function MovimentacaoEntrada() {
     }
   };
 
+  // -------- item do histórico --------
   const renderItem = ({ item }: { item: Transacao }) => (
-    <View style={[styles.card, { backgroundColor: tema.sectionBoxBackground, borderColor: tema.inputBorderColor }]}>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: tema.sectionBoxBackground,
+          borderColor: tema.inputBorderColor,
+        },
+      ]}
+    >
       <View style={styles.cardRow}>
-      <Text style={[styles.cardType, { color: tema.textColor, backgroundColor: tema.inputBorderColor, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5, overflow: 'hidden' }]}>
-        {item.tipo === 'parcelado' ? 'Parcelado' : 'À Vista'}
-      </Text>
-      <Text style={[styles.cardCategory, { color: tema.textColor }]}>
-        {item.categoria}
-      </Text>
-      <Text style={[styles.cardValue, { color: tema.linkColor }]}>
-        {formatCurrency(item.valor)}
+        <Text
+          style={[
+            styles.cardType,
+            {
+              color: tema.textColor,
+              backgroundColor: tema.inputBorderColor,
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: 5,
+              overflow: "hidden",
+            },
+          ]}
+        >
+          {item.tipo === "parcelado" ? "Parcelado" : "À Vista"}
+        </Text>
+
+        <Text
+          style={[styles.cardCategory, { color: tema.textColor }]}
+          numberOfLines={1}
+        >
+          {item.categoria}
+        </Text>
+
+        <Text style={[styles.cardValue, { color: tema.linkColor }]}>
+          {formatCurrency(item.valor)}
+        </Text>
+      </View>
+
+      {/* Só mostra a observação se o usuário realmente escreveu algo */}
+      {item.descricao?.trim() ? (
+        <Text
+          style={[
+            styles.cardDescription,
+            { color: tema.textSecondaryColor },
+          ]}
+        >
+          {item.descricao}
+        </Text>
+      ) : null}
+
+      {item.taxajuros && item.taxajuros > 0 ? (
+        <Text
+          style={[styles.cardDate, { color: tema.textSecondaryColor }]}
+        >
+          Taxa de Juros:{" "}
+          {Number(item.taxajuros).toFixed(2).replace(".", ",")}%
+        </Text>
+      ) : null}
+
+      <Text style={[styles.cardDate, { color: tema.textSecondaryColor }]}>
+        {new Date(item.data).toLocaleDateString("pt-BR")}
       </Text>
     </View>
-    <Text style={[styles.cardDescription, { color: tema.textSecondaryColor }]}>
-      {item.descricao}
-    </Text>
-    {item.taxajuros && item.taxajuros > 0 && (
-      <Text style={[styles.cardDate, { color: tema.textSecondaryColor }]}>
-        Taxa de Juros: {item.taxajuros}%
-      </Text>
-    )}
-    <Text style={[styles.cardDate, { color: tema.textSecondaryColor }]}>
-      {new Date(item.data).toLocaleDateString("pt-BR")}
-    </Text>
-  </View>
   );
 
+  // -------- formulário --------
   function renderFormulario() {
     return (
       <>
-        <Text style={[styles.label, { color: tema.textColor }]}>Grupo</Text>
-        <View style={[styles.pickerContainer, { borderColor: tema.inputBorderColor, backgroundColor: tema.inputBackground }]}>
+        <Text style={[styles.label, { color: tema.textColor }]}>
+          Grupo
+        </Text>
+        <View
+          style={[
+            styles.pickerContainer,
+            {
+              borderColor: tema.inputBorderColor,
+              backgroundColor: tema.inputBackground,
+            },
+          ]}
+        >
           <Picker
             selectedValue={grupoSelecionado}
             onValueChange={(itemValue) => setGrupoSelecionado(itemValue)}
@@ -386,29 +550,49 @@ export default function MovimentacaoEntrada() {
           >
             {grupos.length > 0 ? (
               grupos.map((grupo) => (
-                <Picker.Item key={grupo.chave} label={grupo.nome} value={grupo.chave} />
+                <Picker.Item
+                  key={grupo.chave}
+                  label={grupo.nome}
+                  value={grupo.chave}
+                />
               ))
             ) : (
-              <Picker.Item label="Nenhum grupo disponível" value={null} enabled={false} />
+              <Picker.Item
+                label="Nenhum grupo disponível"
+                value={null}
+                enabled={false}
+              />
             )}
           </Picker>
         </View>
 
         <TouchableOpacity
           onPress={carregarGrupos}
-          style={[styles.botaoAtualizar, { backgroundColor: tema.buttonBackground }]}
+          style={[
+            styles.botaoAtualizar,
+            { backgroundColor: tema.buttonBackground },
+          ]}
           disabled={!ipServidor || usuarioId === null}
         >
-          <Text style={[styles.botaoTexto, { color: tema.buttonTextColor }]}>🔄 Atualizar Grupos</Text>
+          <Text
+            style={[styles.botaoTexto, { color: tema.buttonTextColor }]}
+          >
+            🔄 Atualizar Grupos
+          </Text>
         </TouchableOpacity>
 
-        <Text style={[styles.label, { color: tema.textColor }]}>Valor da Entrada (R$)</Text>
+        <Text style={[styles.label, { color: tema.textColor }]}>
+          Valor da Entrada (R$)
+        </Text>
         <TextInput
-          style={[styles.input, {
-            borderColor: tema.inputBorderColor,
-            backgroundColor: tema.inputBackground,
-            color: tema.textColor,
-          }]}
+          style={[
+            styles.input,
+            {
+              borderColor: tema.inputBorderColor,
+              backgroundColor: tema.inputBackground,
+              color: tema.textColor,
+            },
+          ]}
           keyboardType="numeric"
           placeholder="0,00"
           placeholderTextColor={tema.textSecondaryColor}
@@ -416,24 +600,36 @@ export default function MovimentacaoEntrada() {
           onChangeText={handleValorChange}
         />
 
-        <Text style={[styles.label, { color: tema.textColor }]}>Data</Text>
+        <Text style={[styles.label, { color: tema.textColor }]}>
+          Data
+        </Text>
         <TextInput
-          style={[styles.input, {
-            borderColor: tema.inputBorderColor,
-            backgroundColor: tema.inputBackground,
-            color: tema.textColor,
-          }]}
+          style={[
+            styles.input,
+            {
+              borderColor: tema.inputBorderColor,
+              backgroundColor: tema.inputBackground,
+              color: tema.textColor,
+            },
+          ]}
           value={data}
           onChangeText={setData}
           placeholder="YYYY-MM-DD"
           placeholderTextColor={tema.textSecondaryColor}
         />
 
-        <Text style={[styles.label, { color: tema.textColor }]}>Tipo da Transação</Text>
-        <View style={[styles.pickerContainer, {
-          borderColor: tema.inputBorderColor,
-          backgroundColor: tema.inputBackground,
-        }]}>
+        <Text style={[styles.label, { color: tema.textColor }]}>
+          Tipo da Transação
+        </Text>
+        <View
+          style={[
+            styles.pickerContainer,
+            {
+              borderColor: tema.inputBorderColor,
+              backgroundColor: tema.inputBackground,
+            },
+          ]}
+        >
           <Picker
             selectedValue={tipo}
             onValueChange={(itemValue) => setTipo(itemValue)}
@@ -447,11 +643,18 @@ export default function MovimentacaoEntrada() {
           </Picker>
         </View>
 
-        <Text style={[styles.label, { color: tema.textColor }]}>Categoria</Text>
-        <View style={[styles.pickerContainer, {
-          borderColor: tema.inputBorderColor,
-          backgroundColor: tema.inputBackground,
-        }]}>
+        <Text style={[styles.label, { color: tema.textColor }]}>
+          Categoria
+        </Text>
+        <View
+          style={[
+            styles.pickerContainer,
+            {
+              borderColor: tema.inputBorderColor,
+              backgroundColor: tema.inputBackground,
+            },
+          ]}
+        >
           <Picker
             selectedValue={categoria}
             onValueChange={(itemValue) => setCategoria(itemValue)}
@@ -460,30 +663,51 @@ export default function MovimentacaoEntrada() {
           >
             {categoriasDisponiveis.length > 0 ? (
               categoriasDisponiveis.map((cat) => (
-                <Picker.Item key={cat.chave} label={cat.nome_categoria} value={cat.nome_categoria} />
+                <Picker.Item
+                  key={cat.chave}
+                  label={cat.nome_categoria}
+                  value={cat.nome_categoria}
+                />
               ))
             ) : (
-              <Picker.Item label="Nenhuma categoria disponível" value="" enabled={false} />
+              <Picker.Item
+                label="Nenhuma categoria disponível"
+                value=""
+                enabled={false}
+              />
             )}
           </Picker>
         </View>
+
         <TouchableOpacity
           onPress={carregarCategorias}
-          style={[styles.botaoAtualizar, { backgroundColor: tema.buttonBackground }]}
+          style={[
+            styles.botaoAtualizar,
+            { backgroundColor: tema.buttonBackground },
+          ]}
           disabled={!ipServidor || usuarioId === null}
         >
-          <Text style={[styles.botaoTexto, { color: tema.buttonTextColor }]}>🔄 Atualizar Categorias</Text>
+          <Text
+            style={[styles.botaoTexto, { color: tema.buttonTextColor }]}
+          >
+            🔄 Atualizar Categorias
+          </Text>
         </TouchableOpacity>
 
         {tipo === "parcelado" && (
           <>
-            <Text style={[styles.label, { color: tema.textColor }]}>Parcelas</Text>
+            <Text style={[styles.label, { color: tema.textColor }]}>
+              Parcelas
+            </Text>
             <TextInput
-              style={[styles.input, {
-                borderColor: tema.inputBorderColor,
-                backgroundColor: tema.inputBackground,
-                color: tema.textColor,
-              }]}
+              style={[
+                styles.input,
+                {
+                  borderColor: tema.inputBorderColor,
+                  backgroundColor: tema.inputBackground,
+                  color: tema.textColor,
+                },
+              ]}
               keyboardType="numeric"
               placeholder="Número de parcelas"
               placeholderTextColor={tema.textSecondaryColor}
@@ -491,46 +715,76 @@ export default function MovimentacaoEntrada() {
               onChangeText={setParcelas}
             />
 
-            <Text style={[styles.label, { color: tema.textColor }]}>Taxa de Juros (%)</Text>
+            <Text style={[styles.label, { color: tema.textColor }]}>
+              Taxa de Juros (%)
+            </Text>
             <TextInput
-              style={[styles.input, {
-                borderColor: tema.inputBorderColor,
-                backgroundColor: tema.inputBackground,
-                color: tema.textColor,
-              }]}
+              style={[
+                styles.input,
+                {
+                  borderColor: tema.inputBorderColor,
+                  backgroundColor: tema.inputBackground,
+                  color: tema.textColor,
+                },
+              ]}
               keyboardType="numeric"
               placeholder="Ex: 1,50"
               placeholderTextColor={tema.textSecondaryColor}
               value={taxaJuros}
-              onChangeText={(text) => {
-                const numericText = text.replace(/[^0-9,]/g, '');
-                setTaxaJuros(numericText);
-              }}
+              onChangeText={handleTaxaChange}
             />
 
-            <Text style={[styles.label, { color: tema.textColor }]}>Valor por Parcela</Text>
+            <Text style={[styles.label, { color: tema.textColor }]}>
+              Valor por Parcela
+            </Text>
             <TextInput
-              style={[styles.input, { backgroundColor: tema.sectionBoxBackground, color: tema.textColor, opacity: 0.7 }]}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: tema.sectionBoxBackground,
+                  color: tema.textColor,
+                  opacity: 0.7,
+                },
+              ]}
               editable={false}
-              value={valorParcela ? formatCurrency(parseFloat(valorParcela)) : formatCurrency(0)}
+              value={
+                valorParcela
+                  ? formatCurrency(parseFloat(valorParcela))
+                  : formatCurrency(0)
+              }
             />
-            <Text style={[styles.label, { color: tema.textColor }]}>Fim do Parcelamento</Text>
+
+            <Text style={[styles.label, { color: tema.textColor }]}>
+              Fim do Parcelamento
+            </Text>
             <TextInput
-              style={[styles.input, { backgroundColor: tema.sectionBoxBackground, color: tema.textColor, opacity: 0.7 }]}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: tema.sectionBoxBackground,
+                  color: tema.textColor,
+                  opacity: 0.7,
+                },
+              ]}
               editable={false}
               value={dataTermino}
             />
           </>
         )}
 
-        <Text style={[styles.label, { color: tema.textColor }]}>Descrição (opcional)</Text>
+        <Text style={[styles.label, { color: tema.textColor }]}>
+          Descrição (opcional)
+        </Text>
         <TextInput
-          style={[styles.input, {
-            borderColor: tema.inputBorderColor,
-            backgroundColor: tema.inputBackground,
-            color: tema.textColor,
-            minHeight: 80,
-          }]}
+          style={[
+            styles.input,
+            {
+              borderColor: tema.inputBorderColor,
+              backgroundColor: tema.inputBackground,
+              color: tema.textColor,
+              minHeight: 80,
+            },
+          ]}
           value={descricao}
           onChangeText={setDescricao}
           placeholder="Ex: Salário do mês, Venda de item"
@@ -542,9 +796,19 @@ export default function MovimentacaoEntrada() {
         <TouchableOpacity
           style={[styles.botaoSalvar, { backgroundColor: tema.linkColor }]}
           onPress={handleSalvar}
-          disabled={loading || !ipServidor || grupoSelecionado === null || !categoria || valorRaw <= 0}
+          disabled={
+            loading ||
+            !ipServidor ||
+            grupoSelecionado === null ||
+            !categoria ||
+            valorRaw <= 0
+          }
         >
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.botaoTexto}>Salvar Entrada</Text>}
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.botaoTexto}>Salvar Entrada</Text>
+          )}
         </TouchableOpacity>
       </>
     );
@@ -555,13 +819,21 @@ export default function MovimentacaoEntrada() {
       {loading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={tema.linkColor} />
-          <Text style={[styles.loadingText, { color: tema.textColor }]}>Carregando...</Text>
+          <Text style={[styles.loadingText, { color: tema.textColor }]}>
+            Carregando...
+          </Text>
         </View>
       )}
 
       <View style={styles.headerContainer}>
-        <Text style={[styles.headerTitle, { color: tema.textColor }]}>Movimentação de Entrada</Text>
-        <TouchableOpacity onPress={() => setShowValues(!showValues)} style={styles.toggleVisibilityButton}>
+        <Text style={[styles.headerTitle, { color: tema.textColor }]}>
+          Movimentação de Entrada
+        </Text>
+
+        <TouchableOpacity
+          onPress={() => setShowValues(!showValues)}
+          style={styles.toggleVisibilityButton}
+        >
           {showValues ? (
             <Feather name="eye" size={24} color={tema.textColor} />
           ) : (
@@ -569,11 +841,24 @@ export default function MovimentacaoEntrada() {
           )}
         </TouchableOpacity>
       </View>
+
       <View style={{ padding: 24, paddingBottom: 100 }}>
         {renderFormulario()}
-        <Text style={[styles.label, { color: tema.textColor, textAlign: 'center', marginTop: 30, fontSize: 18 }]}>
+
+        <Text
+          style={[
+            styles.label,
+            {
+              color: tema.textColor,
+              textAlign: "center",
+              marginTop: 30,
+              fontSize: 18,
+            },
+          ]}
+        >
           Histórico de Entradas
         </Text>
+
         {transacoes.length > 0 ? (
           transacoes.map((item, index) => (
             <View key={item.id || index} style={{ marginTop: 10 }}>
@@ -581,7 +866,11 @@ export default function MovimentacaoEntrada() {
             </View>
           ))
         ) : (
-          <Text style={[styles.noDataText, { color: tema.textSecondaryColor }]}>Nenhuma entrada registrada.</Text>
+          <Text
+            style={[styles.noDataText, { color: tema.textSecondaryColor }]}
+          >
+            Nenhuma entrada registrada.
+          </Text>
         )}
       </View>
     </ScrollView>
@@ -602,8 +891,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     marginBottom: 8,
-    overflow: 'hidden',
-    justifyContent: 'center',
+    overflow: "hidden",
+    justifyContent: "center",
     height: 50,
   },
   botaoAtualizar: {
@@ -633,27 +922,27 @@ const styles = StyleSheet.create({
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.18,
-    shadowRadius: 1.00,
+    shadowRadius: 1.0,
   },
   cardRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 5,
   },
   cardType: {
     fontSize: 14,
-    fontWeight: 'bold',
-    backgroundColor: '#e0e0e0',
+    fontWeight: "bold",
+    backgroundColor: "#e0e0e0",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 5,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   cardCategory: {
     fontSize: 14,
     flex: 1,
-    textAlign: 'center',
+    textAlign: "center",
     marginHorizontal: 5,
   },
   cardValue: {
@@ -666,13 +955,13 @@ const styles = StyleSheet.create({
   },
   cardDate: {
     fontSize: 12,
-    textAlign: 'right',
+    textAlign: "right",
     marginTop: 5,
   },
   headerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     padding: 24,
     paddingBottom: 0,
   },
@@ -685,9 +974,9 @@ const styles = StyleSheet.create({
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
     zIndex: 10,
   },
   loadingText: {
@@ -695,7 +984,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   noDataText: {
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 20,
     fontSize: 16,
   },
