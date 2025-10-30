@@ -133,7 +133,7 @@ export default function Login() {
     animateButton(scaleServidor);
     setTimeout(() => {
       console.log("[Login] navegar -> /servidorconfig");
-      router.push("/servidorconfig");
+      router.push("/Servidorconfig");
     }, 200);
   }
 

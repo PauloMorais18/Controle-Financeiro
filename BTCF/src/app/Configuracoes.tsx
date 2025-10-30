@@ -8,25 +8,32 @@ import {
   ScrollView,
   Alert,
   TextInput,
-  FlatList,
   Modal,
   Pressable,
   ActivityIndicator,
+  LogBox,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { useTheme } from "./ThemeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Feather } from '@expo/vector-icons'; // Importa ícones para visual
+import { Feather } from "@expo/vector-icons";
 
 // --- Definição de Tipo para Categoria ---
 interface Categoria {
   chave: number;
   nome_categoria: string;
-  tipo_transacao: 'entrada' | 'saida';
+  tipo_transacao: "entrada" | "saida";
   chaveusuario: number;
 }
 
 export default function Configuracoes() {
+  // Silencia o aviso do Expo/React Native em modo debug (opcional, seguro)
+  useEffect(() => {
+    LogBox.ignoreLogs([
+      "VirtualizedLists should never be nested inside plain ScrollViews",
+    ]);
+  }, []);
+
   const { temaEscuro, setTemaEscuro, tema } = useTheme();
   const [emailExportacao, setEmailExportacao] = useState("usuario@email.com");
   const [notificacoes, setNotificacoes] = useState(true);
@@ -34,56 +41,83 @@ export default function Configuracoes() {
   const [usuarioId, setUsuarioId] = useState<number | null>(null);
   const [loadingCategorias, setLoadingCategorias] = useState(false);
   const [categoriasEntrada, setCategoriasEntrada] = useState<Categoria[]>([]);
-  const [categoriasSaida, setCategoriasSaida] = useState<Categoria[]>([]); // Novo estado para categorias de saída
+  const [categoriasSaida, setCategoriasSaida] = useState<Categoria[]>([]);
   const [novaCategoriaNome, setNovaCategoriaNome] = useState("");
-  const [modalAdicionarCategoriaVisivel, setModalAdicionarCategoriaVisivel] = useState(false);
-  const [tipoCategoriaAdicionar, setTipoCategoriaAdicionar] = useState<'entrada' | 'saida'>('entrada');
+  const [modalAdicionarCategoriaVisivel, setModalAdicionarCategoriaVisivel] =
+    useState(false);
+  const [tipoCategoriaAdicionar, setTipoCategoriaAdicionar] = useState<
+    "entrada" | "saida"
+  >("entrada");
 
   // Estados para edição de categoria
   const [isEditingCategory, setIsEditingCategory] = useState<boolean>(false);
   const [editedCategoryName, setEditedCategoryName] = useState<string>("");
   const [editedCategoryId, setEditedCategoryId] = useState<number | null>(null);
-  const [editedCategoryType, setEditedCategoryType] = useState<'entrada' | 'saida'>('entrada');
-  const [networkError, setNetworkError] = useState<string | null>(null); // Estado para erros de rede
+  const [editedCategoryType, setEditedCategoryType] = useState<
+    "entrada" | "saida"
+  >("entrada");
+  const [networkError, setNetworkError] = useState<string | null>(null);
 
-  // Função para carregar categorias do backend (agora busca entrada e saída)
-  const carregarCategorias = useCallback(async (currentIpServidor: string | null, currentUsuarioId: number | null) => {
-    if (!currentIpServidor || currentUsuarioId === null) {
-      console.warn("Não foi possível carregar categorias: IP do servidor ou ID do usuário ausente.");
-      return;
-    }
-    setLoadingCategorias(true);
-    setNetworkError(null); // Limpa erros de rede anteriores
-    try {
-      // Buscar categorias de entrada
-      const responseEntrada = await fetch(`${currentIpServidor}/categorias/${currentUsuarioId}/entrada`);
-      if (!responseEntrada.ok) {
-        throw new Error(`Erro ao buscar categorias de entrada: ${responseEntrada.statusText || responseEntrada.status}`);
+  // Função para carregar categorias do backend (entrada e saída)
+  const carregarCategorias = useCallback(
+    async (currentIpServidor: string | null, currentUsuarioId: number | null) => {
+      if (!currentIpServidor || currentUsuarioId === null) {
+        console.warn(
+          "Não foi possível carregar categorias: IP do servidor ou ID do usuário ausente."
+        );
+        return;
       }
-      const categoriasEntradaData: Categoria[] = await responseEntrada.json();
-      setCategoriasEntrada(categoriasEntradaData);
+      setLoadingCategorias(true);
+      setNetworkError(null);
+      try {
+        // Entrada
+        const responseEntrada = await fetch(
+          `${currentIpServidor}/categorias/${currentUsuarioId}/entrada`
+        );
+        if (!responseEntrada.ok) {
+          throw new Error(
+            `Erro ao buscar categorias de entrada: ${
+              responseEntrada.statusText || responseEntrada.status
+            }`
+          );
+        }
+        const categoriasEntradaData: Categoria[] =
+          await responseEntrada.json();
+        setCategoriasEntrada(categoriasEntradaData);
 
-      // Buscar categorias de saída
-      const responseSaida = await fetch(`${currentIpServidor}/categorias/${currentUsuarioId}/saida`);
-      if (!responseSaida.ok) {
-        throw new Error(`Erro ao buscar categorias de saída: ${responseSaida.statusText || responseSaida.status}`);
+        // Saída
+        const responseSaida = await fetch(
+          `${currentIpServidor}/categorias/${currentUsuarioId}/saida`
+        );
+        if (!responseSaida.ok) {
+          throw new Error(
+            `Erro ao buscar categorias de saída: ${
+              responseSaida.statusText || responseSaida.status
+            }`
+          );
+        }
+        const categoriasSaidaData: Categoria[] = await responseSaida.json();
+        setCategoriasSaida(categoriasSaidaData);
+      } catch (error: any) {
+        console.error("Erro ao carregar categorias:", error.message);
+        setNetworkError(
+          `Não foi possível carregar as categorias. Verifique o IP e a conexão. Detalhes: ${error.message}`
+        );
+        Alert.alert(
+          "Erro",
+          `Não foi possível carregar as categorias: ${error.message}`
+        );
+      } finally {
+        setLoadingCategorias(false);
       }
-      const categoriasSaidaData: Categoria[] = await responseSaida.json();
-      setCategoriasSaida(categoriasSaidaData);
-
-    } catch (error: any) {
-      console.error("Erro ao carregar categorias:", error.message);
-      setNetworkError(`Não foi possível carregar as categorias. Verifique o IP e a conexão. Detalhes: ${error.message}`);
-      Alert.alert("Erro", `Não foi possível carregar as categorias: ${error.message}`);
-    } finally {
-      setLoadingCategorias(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   // Carregar IP do servidor e ID do usuário ao iniciar
   useEffect(() => {
     async function carregarConfiguracoesIniciais() {
-      setNetworkError(null); // Limpa erros de rede anteriores
+      setNetworkError(null);
       const ipSalvo = await AsyncStorage.getItem("ipServidor");
       if (ipSalvo) setIpServidor(ipSalvo);
 
@@ -96,22 +130,35 @@ export default function Configuracoes() {
         const userEmail = await AsyncStorage.getItem("usuarioEmail");
         if (userEmail && ipSalvo) {
           try {
-            const userRes = await fetch(`${ipSalvo}/usuario/por-email/${userEmail}`);
+            const userRes = await fetch(
+              `${ipSalvo}/usuario/por-email/${userEmail}`
+            );
             if (userRes.ok) {
               const userData = await userRes.json();
               currentUsuarioId = userData.chave;
               setUsuarioId(currentUsuarioId);
               await AsyncStorage.setItem("usuarioId", String(userData.chave));
             } else {
-              Alert.alert("Erro", "Não foi possível obter o ID do usuário. Faça login novamente.");
+              Alert.alert(
+                "Erro",
+                "Não foi possível obter o ID do usuário. Faça login novamente."
+              );
             }
           } catch (error: any) {
             console.error("Erro ao buscar ID do usuário pelo email:", error);
-            setNetworkError(`Problema ao conectar com o servidor para obter ID do usuário. Detalhes: ${error.message}`);
-            Alert.alert("Erro", "Problema ao conectar com o servidor para obter ID do usuário.");
+            setNetworkError(
+              `Problema ao conectar com o servidor para obter ID do usuário. Detalhes: ${error.message}`
+            );
+            Alert.alert(
+              "Erro",
+              "Problema ao conectar com o servidor para obter ID do usuário."
+            );
           }
         } else {
-          Alert.alert("Erro", "ID do usuário ou Email não encontrado. Por favor, faça login novamente.");
+          Alert.alert(
+            "Erro",
+            "ID do usuário ou Email não encontrado. Por favor, faça login novamente."
+          );
         }
       }
 
@@ -127,12 +174,12 @@ export default function Configuracoes() {
       Alert.alert("Erro", "O IP deve começar com http:// ou https://");
       return;
     }
-    setNetworkError(null); // Limpa erros de rede anteriores
+    setNetworkError(null);
     try {
       await AsyncStorage.setItem("ipServidor", ipServidor);
       Alert.alert("✅ Sucesso", "IP do servidor salvo!");
       if (usuarioId !== null) {
-        carregarCategorias(ipServidor, usuarioId); // Recarrega categorias com o novo IP
+        carregarCategorias(ipServidor, usuarioId);
       }
     } catch (error: any) {
       console.error(error);
@@ -141,7 +188,7 @@ export default function Configuracoes() {
     }
   }
 
-  // Função para adicionar uma nova categoria
+  // Função para adicionar categoria
   const handleAdicionarCategoria = async () => {
     if (!novaCategoriaNome.trim()) {
       Alert.alert("Erro", "O nome da categoria não pode ser vazio.");
@@ -153,13 +200,11 @@ export default function Configuracoes() {
     }
 
     setLoadingCategorias(true);
-    setNetworkError(null); // Limpa erros de rede anteriores
+    setNetworkError(null);
     try {
       const response = await fetch(`${ipServidor}/categorias`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chaveusuario: usuarioId,
           nome_categoria: novaCategoriaNome.trim(),
@@ -170,13 +215,18 @@ export default function Configuracoes() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.erro || `Erro ao adicionar categoria: ${response.statusText || response.status}`);
+        throw new Error(
+          data.erro ||
+            `Erro ao adicionar categoria: ${
+              response.statusText || response.status
+            }`
+        );
       }
 
       Alert.alert("Sucesso", "Categoria adicionada com sucesso!");
       setNovaCategoriaNome("");
       setModalAdicionarCategoriaVisivel(false);
-      carregarCategorias(ipServidor, usuarioId); // Recarrega a lista de categorias
+      carregarCategorias(ipServidor, usuarioId);
     } catch (error: any) {
       console.error("Erro ao adicionar categoria:", error.message);
       setNetworkError(`Não foi possível adicionar a categoria: ${error.message}`);
@@ -186,7 +236,7 @@ export default function Configuracoes() {
     }
   };
 
-  // Função para deletar uma categoria
+  // Função para deletar categoria
   const handleDeletarCategoria = async (chaveCategoria: number) => {
     if (!ipServidor || usuarioId === null) {
       Alert.alert("Erro", "IP do servidor ou ID do usuário ausente.");
@@ -197,35 +247,43 @@ export default function Configuracoes() {
       "Confirmar Exclusão",
       "Tem certeza que deseja excluir esta categoria? As transações existentes com esta categoria não serão alteradas.",
       [
-        {
-          text: "Cancelar",
-          style: "cancel",
-        },
+        { text: "Cancelar", style: "cancel" },
         {
           text: "Excluir",
           onPress: async () => {
             setLoadingCategorias(true);
-            setNetworkError(null); // Limpa erros de rede anteriores
+            setNetworkError(null);
             try {
-              const response = await fetch(`${ipServidor}/categorias/${chaveCategoria}`, {
-                method: 'DELETE',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ chaveusuario: usuarioId }) // Envia o ID do usuário para validação no backend
-              });
+              const response = await fetch(
+                `${ipServidor}/categorias/${chaveCategoria}`,
+                {
+                  method: "DELETE",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ chaveusuario: usuarioId }),
+                }
+              );
 
               if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.erro || `Erro ao deletar categoria: ${response.statusText || response.status}`);
+                throw new Error(
+                  errorData.erro ||
+                    `Erro ao deletar categoria: ${
+                      response.statusText || response.status
+                    }`
+                );
               }
 
               Alert.alert("Sucesso", "Categoria excluída com sucesso!");
-              carregarCategorias(ipServidor, usuarioId); // Recarrega a lista de categorias
+              carregarCategorias(ipServidor, usuarioId);
             } catch (error: any) {
               console.error("Erro ao deletar categoria:", error.message);
-              setNetworkError(`Não foi possível excluir a categoria: ${error.message}`);
-              Alert.alert("Erro", `Não foi possível excluir a categoria: ${error.message}`);
+              setNetworkError(
+                `Não foi possível excluir a categoria: ${error.message}`
+              );
+              Alert.alert(
+                "Erro",
+                `Não foi possível excluir a categoria: ${error.message}`
+              );
             } finally {
               setLoadingCategorias(false);
             }
@@ -235,7 +293,7 @@ export default function Configuracoes() {
     );
   };
 
-  // Funções para edição de categoria
+  // Edição
   const handleEditCategoryClick = (category: Categoria) => {
     setIsEditingCategory(true);
     setEditedCategoryId(category.chave);
@@ -254,32 +312,35 @@ export default function Configuracoes() {
     }
 
     setLoadingCategorias(true);
-    setNetworkError(null); // Limpa erros de rede anteriores
+    setNetworkError(null);
     try {
       const response = await fetch(`${ipServidor}/categorias/${editedCategoryId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nome_categoria: editedCategoryName.trim(),
           tipo_transacao: editedCategoryType,
-          chaveusuario: usuarioId, // Envia o ID do usuário para validação no backend
+          chaveusuario: usuarioId,
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.erro || `Erro ao atualizar categoria: ${response.statusText || response.status}`);
+        throw new Error(
+          data.erro ||
+            `Erro ao atualizar categoria: ${
+              response.statusText || response.status
+            }`
+        );
       }
 
       Alert.alert("Sucesso", "Categoria atualizada com sucesso!");
       setIsEditingCategory(false);
       setEditedCategoryId(null);
       setEditedCategoryName("");
-      setEditedCategoryType('entrada');
-      carregarCategorias(ipServidor, usuarioId); // Recarrega a lista
+      setEditedCategoryType("entrada");
+      carregarCategorias(ipServidor, usuarioId);
     } catch (error: any) {
       console.error("Erro ao atualizar categoria:", error.message);
       setNetworkError(`Não foi possível atualizar a categoria: ${error.message}`);
@@ -293,50 +354,37 @@ export default function Configuracoes() {
     setIsEditingCategory(false);
     setEditedCategoryId(null);
     setEditedCategoryName("");
-    setEditedCategoryType('entrada');
+    setEditedCategoryType("entrada");
   };
 
   function handleExportarDados() {
     Alert.alert("Exportar Dados", `Os dados foram enviados para: ${emailExportacao}`);
   }
 
-  async function handleLimparDados() {
-    Alert.alert(
-      "Confirmar Limpeza",
-      "Tem certeza que deseja apagar TODOS os dados do aplicativo? Esta ação é irreversível.",
-      [
-        {
-          text: "Cancelar",
-          style: "cancel",
-        },
-        {
-          text: "Limpar",
-          onPress: async () => {
-            try {
-              await AsyncStorage.clear();
-              Alert.alert("🧹 Dados limpos", "Todos os dados do aplicativo foram apagados com sucesso.");
-            } catch (error: any) {
-              console.error("Erro ao limpar AsyncStorage:", error);
-              Alert.alert("Erro", `Não foi possível limpar os dados: ${error.message}`);
-            }
-          },
-        },
-      ]
-    );
-  }
-
-  const renderCategoryItem = ({ item }: { item: Categoria }) => (
+  // Item de categoria (renderização simples, sem FlatList)
+  const CategoryRow = ({ item }: { item: Categoria }) => (
     <View style={[styles.categoryItem, { borderBottomColor: tema.inputBorderColor }]}>
       {isEditingCategory && editedCategoryId === item.chave ? (
-        // Modo de Edição
         <View style={styles.editCategoryContainer}>
           <TextInput
-            style={[styles.editCategoryInput, { borderColor: tema.inputBorderColor, color: tema.textColor, backgroundColor: tema.inputBackground }]}
+            style={[
+              styles.editCategoryInput,
+              {
+                borderColor: tema.inputBorderColor,
+                color: tema.textColor,
+                backgroundColor: tema.inputBackground,
+              },
+            ]}
             value={editedCategoryName}
             onChangeText={setEditedCategoryName}
             autoFocus
           />
-          <View style={[styles.editCategoryPickerContainer, { borderColor: tema.inputBorderColor, backgroundColor: tema.inputBackground }]}>
+          <View
+            style={[
+              styles.editCategoryPickerContainer,
+              { borderColor: tema.inputBorderColor, backgroundColor: tema.inputBackground },
+            ]}
+          >
             <Picker
               selectedValue={editedCategoryType}
               onValueChange={(itemValue) => setEditedCategoryType(itemValue)}
@@ -347,23 +395,38 @@ export default function Configuracoes() {
               <Picker.Item label="Saída" value="saida" />
             </Picker>
           </View>
-          <TouchableOpacity onPress={handleSaveEditedCategory} style={[styles.editButton, { backgroundColor: tema.linkColor }]}>
+          <TouchableOpacity
+            onPress={handleSaveEditedCategory}
+            style={[styles.editButton, { backgroundColor: tema.linkColor }]}
+          >
             <Text style={styles.buttonTextSmall}>Salvar</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleCancelEdit} style={[styles.deleteButton, { backgroundColor: tema.buttonBackground }]}>
+          <TouchableOpacity
+            onPress={handleCancelEdit}
+            style={[styles.deleteButton, { backgroundColor: tema.buttonBackground }]}
+          >
             <Text style={styles.buttonTextSmall}>Cancelar</Text>
           </TouchableOpacity>
         </View>
       ) : (
-        // Modo de Visualização
         <>
-          <Text style={[styles.categoryText, { color: tema.textColor }]}>{item.nome_categoria}</Text>
-          <Text style={[styles.categoryTypeText, { color: tema.textSecondaryColor }]}>({item.tipo_transacao === 'entrada' ? 'Entrada' : 'Saída'})</Text>
+          <Text style={[styles.categoryText, { color: tema.textColor }]}>
+            {item.nome_categoria}
+          </Text>
+          <Text style={[styles.categoryTypeText, { color: tema.textSecondaryColor }]}>
+            ({item.tipo_transacao === "entrada" ? "Entrada" : "Saída"})
+          </Text>
           <View style={styles.categoryActions}>
-            <TouchableOpacity onPress={() => handleEditCategoryClick(item)} style={[styles.editButton, { backgroundColor: tema.linkColor }]}>
+            <TouchableOpacity
+              onPress={() => handleEditCategoryClick(item)}
+              style={[styles.editButton, { backgroundColor: tema.linkColor }]}
+            >
               <Text style={styles.buttonTextSmall}>Editar</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleDeletarCategoria(item.chave)} style={[styles.deleteButton, { backgroundColor: '#D32F2F' }]}>
+            <TouchableOpacity
+              onPress={() => handleDeletarCategoria(item.chave)}
+              style={[styles.deleteButton, { backgroundColor: "#D32F2F" }]}
+            >
               <Text style={styles.buttonTextSmall}>Remover</Text>
             </TouchableOpacity>
           </View>
@@ -374,16 +437,18 @@ export default function Configuracoes() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: tema.backgroundColor }]}>
-      {loadingCategorias && ( // Overlay de carregamento para categorias
+      {loadingCategorias && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={tema.linkColor} />
-          <Text style={[styles.loadingText, { color: tema.textColor }]}>Carregando categorias...</Text>
+          <Text style={[styles.loadingText, { color: tema.textColor }]}>
+            Carregando categorias...
+          </Text>
         </View>
       )}
 
-      {networkError && ( // Exibe erro de rede
+      {networkError && (
         <View style={[styles.errorContainer, { backgroundColor: tema.sectionBoxBackground }]}>
-          <Text style={[styles.errorText, { color: 'red' }]}>{networkError}</Text>
+          <Text style={[styles.errorText, { color: "red" }]}>{networkError}</Text>
           <Text style={[styles.errorHint, { color: tema.textColor }]}>
             Verifique se o seu servidor backend está rodando e se o IP configurado está correto.
             Para emuladores Android, o IP geralmente é `http://10.0.2.2:3000`. Para iOS, `http://localhost:3000`.
@@ -394,12 +459,20 @@ export default function Configuracoes() {
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>👤 Perfil</Text>
       <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground }]}>
         <Text style={[styles.item, { color: tema.itemColor }]}>Nome: Usuário</Text>
-        <Text style={[styles.item, { color: tema.itemColor }]}>E-mail: usuario@email.com</Text>
+        <Text style={[styles.item, { color: tema.itemColor }]}>
+          E-mail: usuario@email.com
+        </Text>
         <View style={styles.rowButtons}>
-          <TouchableOpacity style={[styles.button, { backgroundColor: tema.linkColor }]} onPress={() => Alert.alert("Funcionalidade", "Editar Perfil em desenvolvimento")}>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: tema.linkColor }]}
+            onPress={() => Alert.alert("Funcionalidade", "Editar Perfil em desenvolvimento")}
+          >
             <Text style={styles.buttonText}>Editar Perfil</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.button, { backgroundColor: tema.linkColor }]} onPress={() => Alert.alert("Funcionalidade", "Alterar Senha em desenvolvimento")}>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: tema.linkColor }]}
+            onPress={() => Alert.alert("Funcionalidade", "Alterar Senha em desenvolvimento")}
+          >
             <Text style={styles.buttonText}>Alterar Senha</Text>
           </TouchableOpacity>
         </View>
@@ -409,17 +482,31 @@ export default function Configuracoes() {
       <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground }]}>
         <View style={styles.toggleRow}>
           <Text style={[styles.item, { color: tema.itemColor }]}>Tema Escuro</Text>
-          <Switch value={temaEscuro} onValueChange={setTemaEscuro} trackColor={{ false: tema.inputBorderColor, true: tema.linkColor }} thumbColor={tema.textColor} />
+          <Switch
+            value={temaEscuro}
+            onValueChange={setTemaEscuro}
+            trackColor={{ false: tema.inputBorderColor, true: tema.linkColor }}
+            thumbColor={tema.textColor}
+          />
         </View>
         <View style={styles.toggleRow}>
           <Text style={[styles.item, { color: tema.itemColor }]}>Notificações</Text>
-          <Switch value={notificacoes} onValueChange={setNotificacoes} trackColor={{ false: tema.inputBorderColor, true: tema.linkColor }} thumbColor={tema.textColor} />
+          <Switch
+            value={notificacoes}
+            onValueChange={setNotificacoes}
+            trackColor={{ false: tema.inputBorderColor, true: tema.linkColor }}
+            thumbColor={tema.textColor}
+          />
         </View>
       </View>
 
-      <Text style={[styles.sectionTitle, { color: tema.textColor }]}>🌐 Configurações do Servidor</Text>
+      <Text style={[styles.sectionTitle, { color: tema.textColor }]}>
+        🌐 Configurações do Servidor
+      </Text>
       <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground }]}>
-        <Text style={[styles.label, { color: tema.textColor }]}>Endereço IP do servidor:</Text>
+        <Text style={[styles.label, { color: tema.textColor }]}>
+          Endereço IP do servidor:
+        </Text>
         <TextInput
           style={[
             styles.input,
@@ -435,44 +522,68 @@ export default function Configuracoes() {
           placeholderTextColor={tema.textSecondaryColor}
           autoCapitalize="none"
         />
-        <TouchableOpacity style={[styles.button, { backgroundColor: tema.linkColor }]} onPress={handleSalvarIP}>
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: tema.linkColor }]}
+          onPress={handleSalvarIP}
+        >
           <Text style={styles.buttonText}>Salvar IP</Text>
         </TouchableOpacity>
       </View>
 
       {/* --- SEÇÃO: GERENCIAR CATEGORIAS --- */}
-      <Text style={[styles.sectionTitle, { color: tema.textColor }]}>🏷️ Gerenciar Categorias</Text>
+      <Text style={[styles.sectionTitle, { color: tema.textColor }]}>
+        🏷️ Gerenciar Categorias
+      </Text>
       <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground }]}>
-        <Text style={[styles.item, { color: tema.itemColor, marginBottom: 10, fontWeight: 'bold' }]}>Categorias de Entrada:</Text>
+        <Text
+          style={[
+            styles.item,
+            { color: tema.itemColor, marginBottom: 10, fontWeight: "bold" },
+          ]}
+        >
+          Categorias de Entrada:
+        </Text>
+
         {loadingCategorias ? (
           <ActivityIndicator size="small" color={tema.textColor} />
         ) : categoriasEntrada.length > 0 ? (
-          <FlatList
-            data={categoriasEntrada}
-            keyExtractor={(item) => `entrada-${item.chave.toString()}`}
-            renderItem={renderCategoryItem}
-            ListEmptyComponent={() => (
-              <Text style={[styles.noDataText, { color: tema.itemColor }]}>Nenhuma categoria de entrada cadastrada.</Text>
-            )}
-          />
+          <View>
+            {categoriasEntrada.map((cat) => (
+              <CategoryRow key={`entrada-${cat.chave}`} item={cat} />
+            ))}
+          </View>
         ) : (
-          <Text style={[styles.noDataText, { color: tema.itemColor }]}>Nenhuma categoria de entrada cadastrada.</Text>
+          <Text style={[styles.noDataText, { color: tema.itemColor }]}>
+            Nenhuma categoria de entrada cadastrada.
+          </Text>
         )}
 
-        <Text style={[styles.item, { color: tema.itemColor, marginTop: 20, marginBottom: 10, fontWeight: 'bold' }]}>Categorias de Saída:</Text>
+        <Text
+          style={[
+            styles.item,
+            {
+              color: tema.itemColor,
+              marginTop: 20,
+              marginBottom: 10,
+              fontWeight: "bold",
+            },
+          ]}
+        >
+          Categorias de Saída:
+        </Text>
+
         {loadingCategorias ? (
           <ActivityIndicator size="small" color={tema.textColor} />
         ) : categoriasSaida.length > 0 ? (
-          <FlatList
-            data={categoriasSaida}
-            keyExtractor={(item) => `saida-${item.chave.toString()}`}
-            renderItem={renderCategoryItem}
-            ListEmptyComponent={() => (
-              <Text style={[styles.noDataText, { color: tema.itemColor }]}>Nenhuma categoria de saída cadastrada.</Text>
-            )}
-          />
+          <View>
+            {categoriasSaida.map((cat) => (
+              <CategoryRow key={`saida-${cat.chave}`} item={cat} />
+            ))}
+          </View>
         ) : (
-          <Text style={[styles.noDataText, { color: tema.itemColor }]}>Nenhuma categoria de saída cadastrada.</Text>
+          <Text style={[styles.noDataText, { color: tema.itemColor }]}>
+            Nenhuma categoria de saída cadastrada.
+          </Text>
         )}
 
         <TouchableOpacity
@@ -486,9 +597,18 @@ export default function Configuracoes() {
 
       <Text style={[styles.sectionTitle, { color: tema.textColor }]}>📁 Dados</Text>
       <View style={[styles.sectionBox, { backgroundColor: tema.sectionBoxBackground }]}>
-        <Text style={[styles.label, { color: tema.textColor }]}>E-mail para exportação:</Text>
+        <Text style={[styles.label, { color: tema.textColor }]}>
+          E-mail para exportação:
+        </Text>
         <TextInput
-          style={[styles.input, { backgroundColor: tema.inputBackground, borderColor: tema.inputBorderColor, color: tema.textColor }]}
+          style={[
+            styles.input,
+            {
+              backgroundColor: tema.inputBackground,
+              borderColor: tema.inputBorderColor,
+              color: tema.textColor,
+            },
+          ]}
           value={emailExportacao}
           onChangeText={setEmailExportacao}
           keyboardType="email-address"
@@ -496,7 +616,10 @@ export default function Configuracoes() {
           placeholder="Digite o e-mail"
           placeholderTextColor={tema.textSecondaryColor}
         />
-        <TouchableOpacity style={[styles.button, { backgroundColor: tema.linkColor }]} onPress={handleExportarDados}>
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: tema.linkColor }]}
+          onPress={handleExportarDados}
+        >
           <Text style={styles.buttonText}>Exportar Dados</Text>
         </TouchableOpacity>
       </View>
@@ -508,7 +631,33 @@ export default function Configuracoes() {
         <Text style={[styles.link, { color: tema.linkColor }]}>Suporte</Text>
       </View>
 
-      <TouchableOpacity style={[styles.button, { backgroundColor: "#D32F2F", marginBottom: 40 }]} onPress={handleLimparDados}>
+      <TouchableOpacity
+        style={[styles.button, { backgroundColor: "#D32F2F", marginBottom: 40 }]}
+        onPress={() => {
+          Alert.alert(
+            "Confirmar Limpeza",
+            "Tem certeza que deseja apagar TODOS os dados do aplicativo? Esta ação é irreversível.",
+            [
+              { text: "Cancelar", style: "cancel" },
+              {
+                text: "Limpar",
+                onPress: async () => {
+                  try {
+                    await AsyncStorage.clear();
+                    Alert.alert(
+                      "🧹 Dados limpos",
+                      "Todos os dados do aplicativo foram apagados com sucesso."
+                    );
+                  } catch (error: any) {
+                    console.error("Erro ao limpar AsyncStorage:", error);
+                    Alert.alert("Erro", `Não foi possível limpar os dados: ${error.message}`);
+                  }
+                },
+              },
+            ]
+          );
+        }}
+      >
         <Text style={styles.buttonText}>🧹 Limpar Dados do Aplicativo</Text>
       </TouchableOpacity>
 
@@ -519,12 +668,27 @@ export default function Configuracoes() {
         animationType="fade"
         onRequestClose={() => setModalAdicionarCategoriaVisivel(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setModalAdicionarCategoriaVisivel(false)}>
-          <Pressable style={[styles.modalContent, { backgroundColor: tema.sectionBoxBackground }]} onPress={(e) => e.stopPropagation()}>
-            <Text style={[styles.modalTitle, { color: tema.textColor }]}>Adicionar Nova Categoria</Text>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setModalAdicionarCategoriaVisivel(false)}
+        >
+          <Pressable
+            style={[styles.modalContent, { backgroundColor: tema.sectionBoxBackground }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={[styles.modalTitle, { color: tema.textColor }]}>
+              Adicionar Nova Categoria
+            </Text>
 
-            <Text style={[styles.label, { color: tema.textColor }]}>Tipo de Transação</Text>
-            <View style={[styles.pickerContainer, { borderColor: tema.inputBorderColor, backgroundColor: tema.inputBackground }]}>
+            <Text style={[styles.label, { color: tema.textColor }]}>
+              Tipo de Transação
+            </Text>
+            <View
+              style={[
+                styles.pickerContainer,
+                { borderColor: tema.inputBorderColor, backgroundColor: tema.inputBackground },
+              ]}
+            >
               <Picker
                 selectedValue={tipoCategoriaAdicionar}
                 onValueChange={(itemValue) => setTipoCategoriaAdicionar(itemValue)}
@@ -536,13 +700,18 @@ export default function Configuracoes() {
               </Picker>
             </View>
 
-            <Text style={[styles.label, { color: tema.textColor }]}>Nome da Categoria</Text>
+            <Text style={[styles.label, { color: tema.textColor }]}>
+              Nome da Categoria
+            </Text>
             <TextInput
-              style={[styles.input, {
-                backgroundColor: tema.inputBackground,
-                borderColor: tema.inputBorderColor,
-                color: tema.textColor,
-              }]}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: tema.inputBackground,
+                  borderColor: tema.inputBorderColor,
+                  color: tema.textColor,
+                },
+              ]}
               placeholder="Ex: Salário, Aluguel, Lazer"
               placeholderTextColor={tema.textSecondaryColor}
               value={novaCategoriaNome}
@@ -554,7 +723,11 @@ export default function Configuracoes() {
                 onPress={handleAdicionarCategoria}
                 disabled={loadingCategorias}
               >
-                {loadingCategorias ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Salvar</Text>}
+                {loadingCategorias ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Salvar</Text>
+                )}
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, { backgroundColor: tema.buttonBackground }]}
@@ -567,7 +740,6 @@ export default function Configuracoes() {
           </Pressable>
         </Pressable>
       </Modal>
-
     </ScrollView>
   );
 }
@@ -586,17 +758,27 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
   },
   item: { fontSize: 16, marginBottom: 10 },
-  toggleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  toggleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
+  },
   button: {
     backgroundColor: "#1976D2",
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
     marginVertical: 6,
-    alignItems: 'center', // Centraliza o texto
+    alignItems: "center",
   },
   buttonText: { color: "#fff", fontSize: 16, textAlign: "center" },
-  rowButtons: { flexDirection: "row", justifyContent: "space-between", gap: 10, marginTop: 10 },
+  rowButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 10,
+  },
   link: { fontSize: 16, textDecorationLine: "underline", marginBottom: 8 },
   input: {
     borderWidth: 1,
@@ -606,95 +788,83 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
   },
+  label: { fontSize: 14, marginBottom: 6 },
+  pickerContainer: {
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 12,
+    overflow: "hidden",
+    height: 45,
+    justifyContent: "center",
+  },
+
   // Estilos para Gerenciar Categorias
   categoryItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12, // Aumentado para melhor toque
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    flexWrap: 'wrap', // Permite quebrar linha em telas menores
+    borderBottomColor: "#eee",
+    flexWrap: "wrap",
   },
-  categoryText: {
-    fontSize: 16,
-    flexShrink: 1,
-    marginRight: 10,
-  },
-  categoryTypeText: { // Estilo para o texto (Entrada/Saída)
-    fontSize: 13,
-    fontStyle: 'italic',
-    marginRight: 10,
-  },
-  categoryActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  categoryText: { fontSize: 16, flexShrink: 1, marginRight: 10 },
+  categoryTypeText: { fontSize: 13, fontStyle: "italic", marginRight: 10 },
+  categoryActions: { flexDirection: "row", alignItems: "center" },
   editButton: {
-    backgroundColor: '#03A9F4',
+    backgroundColor: "#03A9F4",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 5,
     marginLeft: 5,
   },
   deleteButton: {
-    backgroundColor: '#ff4d4d',
+    backgroundColor: "#ff4d4d",
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 5,
     marginLeft: 5,
   },
-  buttonTextSmall: {
-    color: '#fff',
-    fontSize: 12,
-    textAlign: 'center',
-  },
+  buttonTextSmall: { color: "#fff", fontSize: 12, textAlign: "center" },
   noDataText: {
-    textAlign: 'center',
-    fontStyle: 'italic',
+    textAlign: "center",
+    fontStyle: "italic",
     marginTop: 10,
     paddingVertical: 10,
   },
-  // Estilos para Modal
+
+  // Modal
   modalOverlay: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   modalContent: {
-    width: '85%', // Aumentado para melhor visualização
+    width: "85%",
     borderRadius: 10,
-    padding: 25, // Aumentado padding
+    padding: 25,
     elevation: 5,
   },
-  modalTitle: {
-    fontSize: 22, // Aumentado tamanho
-    fontWeight: 'bold',
-    marginBottom: 20, // Aumentado margem
-    textAlign: 'center',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 25, // Aumentado margem
-  },
+  modalTitle: { fontSize: 22, fontWeight: "bold", marginBottom: 20, textAlign: "center" },
+  modalButtons: { flexDirection: "row", justifyContent: "space-around", marginTop: 25 },
   modalButton: {
-    paddingVertical: 12, // Aumentado para melhor toque
+    paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
     marginHorizontal: 5,
   },
-  // Estilos para o modo de edição de categoria
+
+  // Edição
   editCategoryContainer: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 10, // Espaço entre itens de edição
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    marginBottom: 10,
   },
   editCategoryInput: {
     flex: 1,
@@ -711,38 +881,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     marginBottom: 8,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginRight: 5,
-    height: 45, // Altura fixa para o Picker
-    justifyContent: 'center',
-  },
-  editCategoryPicker: {
     height: 45,
+    justifyContent: "center",
   },
+  editCategoryPicker: { height: 45 },
+
+  // Loading / Erro
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
     zIndex: 10,
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-  },
+  loadingText: { marginTop: 10, fontSize: 16 },
   errorContainer: {
     padding: 15,
     borderRadius: 8,
     marginBottom: 15,
     borderWidth: 1,
-    borderColor: 'red',
+    borderColor: "red",
   },
-  errorText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  errorHint: {
-    fontSize: 14,
-  },
+  errorText: { fontSize: 16, fontWeight: "bold", marginBottom: 5 },
+  errorHint: { fontSize: 14 },
 });
